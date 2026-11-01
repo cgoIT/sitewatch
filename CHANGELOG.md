@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.0.0](https://github.com/cgoIT/sitewatch/compare/v0.6.1...v1.0.0) (2026-11-01)
+
+
+### Features
+
+* Ergebnisse von Weckruf und Zertifikatsprüfung anzeigen, Schemaversion der Datenbank mit Migrationen ([9e7ca4c](https://github.com/cgoIT/sitewatch/commit/9e7ca4c28d24f9e2dc062e30dca5fd29fb6eeada))
+
+
+### Bug Fixes
+
+* Migration liest die Version in der Transaktion, Prüffehler ohne interne Adressen anzeigen, weitere Tests ([56a075e](https://github.com/cgoIT/sitewatch/commit/56a075e73de7dbe6abe8ed8e66b4097ca47b1810))
+
+
+### Miscellaneous Chores
+
+* Version 1.0.0 ([5adec2e](https://github.com/cgoIT/sitewatch/commit/5adec2e31b27e284ff9b8e2f9b8fdef813b66f1d))
+
 ## [0.6.1](https://github.com/cgoIT/sitewatch/compare/v0.6.0...v0.6.1) (2026-11-01)
 
 
