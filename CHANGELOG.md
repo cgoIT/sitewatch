@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.6.0](https://github.com/cgoIT/sitewatch/compare/v0.5.0...v0.6.0) (2026-11-01)
+
+
+### Features
+
+* verwaiste Sites mit allen Daten entfernen ([53401e3](https://github.com/cgoIT/sitewatch/commit/53401e376e8bd69774c6dc32cb24f138625f4a9d))
+
+
+### Bug Fixes
+
+* Alarmzustand gelöschter Sites verwerfen, Löschen dokumentiert und genauer getestet ([032ab6c](https://github.com/cgoIT/sitewatch/commit/032ab6cad43869488889929c21769b4fe9a6d099))
+
 ## [0.5.0](https://github.com/cgoIT/sitewatch/compare/v0.4.1...v0.5.0) (2026-11-01)
 
 
