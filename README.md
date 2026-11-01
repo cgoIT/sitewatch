@@ -134,6 +134,13 @@ Die meisten Aktionen rufen `<SITE_DIR>/bin/site <befehl>` auf (das Werkzeug des 
 Contao-Konsole. Es gibt keine freie Shell. `bin/site` läuft als Benutzer des Agenten (meist root) und darf deshalb nicht vom
 Web-Benutzer beschreibbar sein.
 
+## Weckruf und TLS-Prüfung für Contao-Bundles
+
+Hat ein Contao-Bundle-Agent eine Seiten-URL (https), prüft Sitewatch alle sechs Stunden per TLS-Handshake das Ablaufdatum des Zertifikats
+(es ergänzt den Report, der es nicht kennt) und ruft die Seite einmal auf, wenn der letzte Report älter ist als der Wert „Weckruf an die
+Seite“ unter „Einstellungen“ (Standard 90 Minuten), höchstens alle 15 Minuten. Das weckt den Contao-Cron bei Seiten mit wenig Besuchern.
+Der Aufruf ist ein einfaches GET ohne Daten; Weiterleitungen und Ziele in privaten Netzen werden nicht verfolgt. Ohne URL passiert nichts.
+
 ## Sichern und Umziehen
 
 - **Datensicherung:** Alles liegt in `<data>/sitewatch.db` (SQLite) und `<data>/signing.key`. Die Datenbank sichert man im laufenden Betrieb mit

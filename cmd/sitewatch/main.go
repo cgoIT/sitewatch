@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"sitewatch/internal/backup"
+	"sitewatch/internal/probe"
 	"strings"
 	"time"
 
@@ -149,13 +150,16 @@ func serve(args []string) {
 		go ep.Run(context.Background(), 24*time.Hour)
 	}
 	settings := status.NewSettings(cfg)
+	prober := &probe.Prober{Agents: ags, Store: st, Settings: settings, Now: time.Now}
+	go prober.Run(context.Background(), 5*time.Minute)
+	seen := probe.Store{Store: st, P: prober} // Reports samt ermitteltem Zertifikat-Ablauf, für Oberfläche und Alarme
 	var testMail func() error
 	if to := split(*alertTo); len(to) > 0 {
 		if *alertFrom == "" || !strings.Contains(*alertSMTP, ":") {
 			log.Fatal("-alert-to braucht -alert-from und -alert-smtp als host:port")
 		}
 		send := alert.SMTP(*alertSMTP, os.Getenv("SITEWATCH_SMTP_USER"), os.Getenv("SITEWATCH_SMTP_PASSWORD"), *alertFrom, to)
-		w := &alert.Watcher{Store: st, Config: cfg, Settings: settings, Now: time.Now, State: st, Send: send}
+		w := &alert.Watcher{Store: seen, Config: cfg, Settings: settings, Now: time.Now, State: st, Send: send}
 		go w.Run(context.Background(), *alertEvery)
 		testMail = func() error { return send(testSubject, testBody) }
 	} else {
@@ -164,7 +168,7 @@ func serve(args []string) {
 	if _, err := os.Stat(filepath.Join(*data, "tokens.json")); err == nil {
 		log.Printf("Hinweis: %s wird nicht mehr gelesen. Sites mit eigenem Token müssen im Dashboard als Agent angelegt werden.", filepath.Join(*data, "tokens.json"))
 	}
-	srv := web.New(st, cfg)
+	srv := web.New(seen, cfg)
 	srv.Settings = settings
 	srv.SaveSettings = func(c status.Config, vals map[string]int) error {
 		if len(vals) == 0 {

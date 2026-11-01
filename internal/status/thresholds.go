@@ -39,6 +39,7 @@ const (
 var Fields = []Field{
 	durField("stale_after_minutes", gReports, "Keine Meldung seit (Server-Agent): kritisch", "Minuten", time.Minute, func(c *Config) *time.Duration { return &c.StaleAfter }),
 	durField("bundle_stale_after_minutes", gReports, "Keine Meldung seit (Contao-Bundle): kritisch", "Minuten", time.Minute, func(c *Config) *time.Duration { return &c.BundleStaleAfter }),
+	durField("bundle_ping_after_minutes", gReports, "Weckruf an die Seite (Contao-Bundle), wenn der Report älter ist als", "Minuten", time.Minute, func(c *Config) *time.Duration { return &c.BundlePingAfter }),
 	intField("error_warn", gReports, "Fehler in 24 Stunden: Warnung ab", "Fehler", func(c *Config) *int { return &c.ErrorWarn }),
 	durField("eol_warn_days", gVersion, "Support-Ende: Warnung, wenn näher als", "Tage", 24*time.Hour, func(c *Config) *time.Duration { return &c.EOLWarn }),
 	durField("tls_warn_days", gVersion, "TLS-Zertifikat: Warnung, wenn es früher abläuft als", "Tage", 24*time.Hour, func(c *Config) *time.Duration { return &c.TLSWarn }),
@@ -119,6 +120,8 @@ func (c Config) with(vals map[string]int) (Config, error) {
 	switch r := c.Retention; {
 	case c.DiskWarn > 100 || c.DiskCrit > c.DiskWarn:
 		return c, fmt.Errorf("Freier Speicher: kritisch darf nicht über der Warnung liegen, die Warnung höchstens 100 %%")
+	case c.BundlePingAfter >= c.BundleStaleAfter:
+		return c, fmt.Errorf("Weckruf: muss früher kommen als die kritische Meldung „Keine Meldung seit“ des Contao-Bundles")
 	case c.MaintWarn > c.MaintCrit:
 		return c, fmt.Errorf("Wartungsmodus: die Warnung darf nicht später kommen als der kritische Wert")
 	case c.CronWarn > c.CronCrit:

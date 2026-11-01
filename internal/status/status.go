@@ -34,22 +34,24 @@ type Config struct {
 	// BundleStaleAfter ersetzt StaleAfter für Reports des Contao-Bundles: Es meldet nur stündlich und über den Contao-Cron,
 	// der bei wenig Besuchern verzögert läuft.
 	BundleStaleAfter time.Duration
-	ErrorWarn        int             // ab so vielen Fehlern im Fenster = Warnung
-	EOLWarn          time.Duration   // Warnung, wenn das PHP-Support-Ende näher als das ist
-	TLSWarn          time.Duration   // Warnung, wenn das Zertifikat in weniger als dieser Zeit abläuft
-	BackupMax        time.Duration   // Warnung, wenn das letzte Backup älter ist
-	DiskWarn         int             // Warnung, wenn weniger als so viel Prozent Speicher frei sind
-	DiskCrit         int             // kritisch, wenn weniger als so viel Prozent frei sind
-	CronWarn         time.Duration   // Warnung, wenn der letzte Contao-Cron-Lauf länger her ist
-	CronCrit         time.Duration   // kritisch, wenn er noch länger her ist
-	MaintWarn        time.Duration   // Warnung, wenn der Wartungsmodus so lange an ist
-	MaintCrit        time.Duration   // kritisch, wenn er noch länger an ist (vergessen)
-	Retention        store.Retention // Aufbewahrung des Verlaufs und der Tagesstände (siehe store)
-	EOL              EOLSource       // optional: aktuelle Support-Enden (z. B. endoflife.date); nil = nur die eingebaute PHP-Tabelle
+	// BundlePingAfter: ist der Report eines Contao-Bundles so alt, ruft Sitewatch die Seite einmal auf (Weckruf für den Contao-Cron).
+	BundlePingAfter time.Duration
+	ErrorWarn       int             // ab so vielen Fehlern im Fenster = Warnung
+	EOLWarn         time.Duration   // Warnung, wenn das PHP-Support-Ende näher als das ist
+	TLSWarn         time.Duration   // Warnung, wenn das Zertifikat in weniger als dieser Zeit abläuft
+	BackupMax       time.Duration   // Warnung, wenn das letzte Backup älter ist
+	DiskWarn        int             // Warnung, wenn weniger als so viel Prozent Speicher frei sind
+	DiskCrit        int             // kritisch, wenn weniger als so viel Prozent frei sind
+	CronWarn        time.Duration   // Warnung, wenn der letzte Contao-Cron-Lauf länger her ist
+	CronCrit        time.Duration   // kritisch, wenn er noch länger her ist
+	MaintWarn       time.Duration   // Warnung, wenn der Wartungsmodus so lange an ist
+	MaintCrit       time.Duration   // kritisch, wenn er noch länger an ist (vergessen)
+	Retention       store.Retention // Aufbewahrung des Verlaufs und der Tagesstände (siehe store)
+	EOL             EOLSource       // optional: aktuelle Support-Enden (z. B. endoflife.date); nil = nur die eingebaute PHP-Tabelle
 }
 
 func DefaultConfig() Config {
-	return Config{StaleAfter: 15 * time.Minute, BundleStaleAfter: 3 * time.Hour, ErrorWarn: 10, EOLWarn: 90 * 24 * time.Hour,
+	return Config{StaleAfter: 15 * time.Minute, BundleStaleAfter: 3 * time.Hour, BundlePingAfter: 90 * time.Minute, ErrorWarn: 10, EOLWarn: 90 * 24 * time.Hour,
 		TLSWarn: 14 * 24 * time.Hour, BackupMax: 36 * time.Hour, DiskWarn: 15, DiskCrit: 5, CronWarn: 2 * time.Hour, CronCrit: 4 * time.Hour, MaintWarn: 2 * time.Hour, MaintCrit: 8 * time.Hour,
 		Retention: store.DefaultRetention()}
 }
