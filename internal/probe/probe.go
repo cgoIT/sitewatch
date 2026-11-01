@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -37,8 +38,8 @@ type Info struct {
 	PingCode    int    // HTTP-Status des Weckrufs
 	PingErr     string // leer = Antwort erhalten
 	CertAt      time.Time
-	CertErr     string // leer = Zertifikat gelesen
-	CertExpires time.Time
+	CertErr     string    // leer = Zertifikat gelesen
+	CertExpires time.Time // null bei CertErr
 }
 
 // Prober führt die Prüfungen aus und merkt sich das Ablaufdatum der Zertifikate (im Arbeitsspeicher; nach einem Neustart
@@ -58,6 +59,31 @@ type Prober struct {
 	lastPing map[string]time.Time
 	urls     map[string]string // Site-ID → Adresse, für die expires gilt
 	info     map[string]Info
+}
+
+var errInternal = errors.New("Ziel ist keine öffentliche Adresse")
+
+// shortErr macht aus einem Netzwerkfehler eine kurze Kategorie für die Oberfläche. Die ausführliche Meldung (mit aufgelösten Adressen
+// und Texten des Zielservers) bleibt im Log: Sie würde sonst interne Adressen verraten.
+func shortErr(err error) string {
+	var (
+		dns *net.DNSError
+		ne  net.Error
+		op  *net.OpError
+	)
+	switch {
+	case errors.Is(err, errInternal):
+		return "Ziel ist keine öffentliche Adresse"
+	case errors.As(err, &dns):
+		return "Name nicht auflösbar"
+	case errors.As(err, &ne) && ne.Timeout(), errors.Is(err, context.DeadlineExceeded):
+		return "Zeitüberschreitung"
+	case strings.Contains(err.Error(), "tls:") || strings.Contains(err.Error(), "x509:"):
+		return "TLS-Fehler"
+	case errors.As(err, &op):
+		return "Verbindung fehlgeschlagen"
+	}
+	return "Abruf fehlgeschlagen"
 }
 
 // blocked sind Bereiche, die IsPrivate, IsLoopback und Co. nicht abdecken, aber nicht öffentlich erreichbar sind oder interne
@@ -86,7 +112,7 @@ func refuseInternal(_, address string, _ syscall.RawConn) error {
 		bad = bad || p.Contains(ip)
 	}
 	if bad {
-		return fmt.Errorf("Ziel %s ist keine öffentliche Adresse", host)
+		return fmt.Errorf("%w: %s", errInternal, host)
 	}
 	return nil
 }
@@ -249,6 +275,7 @@ func (p *Prober) checkCert(ctx context.Context, id, raw string, now time.Time) {
 		p.urls[id] = raw
 		delete(p.expires, id)
 		delete(p.checked, id)
+		delete(p.lastPing, id)
 		delete(p.info, id)
 	}
 	due := now.Sub(p.checked[id]) >= tlsEvery
@@ -268,7 +295,7 @@ func (p *Prober) checkCert(ctx context.Context, id, raw string, now time.Time) {
 		p.mu.Lock()
 		delete(p.expires, id) // lieber unbekannt als ein veralteter Wert
 		p.mu.Unlock()
-		p.update(id, func(i *Info) { i.CertAt, i.CertErr, i.CertExpires = now, err.Error(), time.Time{} })
+		p.update(id, func(i *Info) { i.CertAt, i.CertErr, i.CertExpires = now, shortErr(err), time.Time{} })
 		return
 	}
 	p.update(id, func(i *Info) { i.CertAt, i.CertErr, i.CertExpires = now, "", t })
@@ -304,7 +331,7 @@ func (p *Prober) wake(ctx context.Context, id, raw string, created, now time.Tim
 	code, err := p.Ping(ctx, raw)
 	if err != nil {
 		log.Printf("probe: Weckruf an %q: %v", id, err)
-		p.update(id, func(i *Info) { i.PingAt, i.PingCode, i.PingErr = now, 0, err.Error() })
+		p.update(id, func(i *Info) { i.PingAt, i.PingCode, i.PingErr = now, 0, shortErr(err) })
 		return
 	}
 	p.update(id, func(i *Info) { i.PingAt, i.PingCode, i.PingErr = now, code, "" })

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -138,5 +139,47 @@ func TestStaleExpiryDropped(t *testing.T) {
 	r = &report.Report{Site: report.Site{ID: "kunde-b"}}
 	if p.Overlay(r); r.Site.TLSExpires != nil {
 		t.Error("veraltetes Ablaufdatum bleibt stehen")
+	}
+}
+
+// Info hält Erfolg und Fehler fest; Fehlertexte nennen keine Adressen, und gelöschte Sites verschwinden.
+func TestInfoRecorded(t *testing.T) {
+	p, _, srv, now := setup(t, http.NotFoundHandler())
+	ctx := context.Background()
+	if _, ok := p.Info("kunde-b"); ok {
+		t.Fatal("Info vor dem ersten Durchlauf")
+	}
+	p.Once(ctx)
+	i, ok := p.Info("kunde-b")
+	if !ok || i.PingCode != http.StatusNotFound || i.PingErr != "" || i.CertErr != "" || !i.CertExpires.Equal(srv.Certificate().NotAfter) {
+		t.Fatalf("nach Erfolg: %+v %v", i, ok)
+	}
+	srv.Close()
+	p.Now = func() time.Time { return now.Add(7 * time.Hour) }
+	p.Once(ctx)
+	i, _ = p.Info("kunde-b")
+	if i.PingErr == "" || i.CertErr == "" || !i.CertExpires.IsZero() {
+		t.Fatalf("nach Fehler: %+v", i)
+	}
+	for _, m := range []string{i.PingErr, i.CertErr} {
+		if strings.Contains(m, "127.0.0.1") || strings.Contains(m, ":") {
+			t.Errorf("Fehlertext verrät Einzelheiten: %q", m)
+		}
+	}
+	if err := p.Agents.Delete("kunde-b"); err != nil {
+		t.Fatal(err)
+	}
+	p.Once(ctx)
+	if _, ok := p.Info("kunde-b"); ok {
+		t.Error("Info einer gelöschten Site bleibt")
+	}
+}
+
+func TestShortErr(t *testing.T) {
+	p, _, srv, _ := setup(t, http.NotFoundHandler())
+	p.AllowInternal = false
+	_, err := p.Ping(context.Background(), srv.URL)
+	if got := shortErr(err); got != "Ziel ist keine öffentliche Adresse" {
+		t.Errorf("interne Adresse: %q (%v)", got, err)
 	}
 }

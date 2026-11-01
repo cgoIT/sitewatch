@@ -53,35 +53,44 @@ const baseVersion = 1
 var migrations []func(tx *sql.Tx) error
 
 // migrate bringt die Datenbank auf die aktuelle Version. Eine neuere Datenbank (Programm zurückgerollt) wird nicht angefasst.
+// Die Version wird je Schritt innerhalb der Transaktion gelesen: Starten zwei Prozesse gleichzeitig, führt nur einer eine Migration aus.
+// shortcut: zwei gleichzeitige Starter können sich um die Schreibsperre streiten (SQLITE_BUSY nach busy_timeout); ein Prozess je Datenbank ist der Normalfall.
 func migrate(db *sql.DB) error {
-	var v int
-	if err := db.QueryRow(`PRAGMA user_version`).Scan(&v); err != nil {
-		return err
-	}
 	want := baseVersion + len(migrations)
-	if v > want {
-		return fmt.Errorf("die Datenbank hat Schemaversion %d, dieses Programm kennt nur %d; bitte Sitewatch aktualisieren", v, want)
-	}
-	v = max(v, baseVersion)
-	for ; v < want; v++ {
+	for {
 		tx, err := db.Begin()
 		if err != nil {
 			return err
 		}
-		if err := migrations[v-baseVersion](tx); err != nil {
-			tx.Rollback()
-			return fmt.Errorf("Migration auf Version %d: %w", v+1, err)
+		var v int
+		if err := tx.QueryRow(`PRAGMA user_version`).Scan(&v); err != nil {
+			_ = tx.Rollback() // der Fehler davor zählt
+			return fmt.Errorf("Schemaversion lesen: %w", err)
 		}
-		if _, err := tx.Exec(fmt.Sprintf(`PRAGMA user_version = %d`, v+1)); err != nil {
-			tx.Rollback()
-			return err
+		switch {
+		case v > want:
+			_ = tx.Rollback()
+			return fmt.Errorf("die Datenbank hat Schemaversion %d, dieses Programm kennt nur %d; bitte Sitewatch aktualisieren", v, want)
+		case v == want:
+			return tx.Rollback()
+		}
+		step := func(tx *sql.Tx) error { return nil } // unversionierte Altdatenbank: Schema ist schon Version 1
+		if v >= baseVersion {
+			step = migrations[v-baseVersion]
+		}
+		next := max(v, baseVersion-1) + 1
+		if err := step(tx); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("Migration auf Version %d: %w", next, err)
+		}
+		if _, err := tx.Exec(fmt.Sprintf(`PRAGMA user_version = %d`, next)); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("Schemaversion %d setzen: %w", next, err)
 		}
 		if err := tx.Commit(); err != nil {
-			return err
+			return fmt.Errorf("Schemaversion %d speichern: %w", next, err)
 		}
 	}
-	_, err := db.Exec(fmt.Sprintf(`PRAGMA user_version = %d`, want)) // setzt auch eine unversionierte Datenbank auf Version 1
-	return err
 }
 
 // OpenSQLite öffnet (und legt bei Bedarf an) die Datenbank. Die Datei ist nur für den Besitzer lesbar.

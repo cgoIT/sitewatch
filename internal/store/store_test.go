@@ -309,7 +309,21 @@ func TestMigrate(t *testing.T) {
 	if v := version(s); v != baseVersion {
 		t.Fatalf("neue Datenbank: Version %d", v)
 	}
-	s.db.Exec(`PRAGMA user_version = 0`) // Datenbank aus der Zeit vor der Versionierung
+	// Datenbank aus der Zeit vor der Versionierung, mit einem Agenten: bleibt unverändert, bekommt nur die Version.
+	if _, err := s.db.Exec(`INSERT INTO agents(id, token_hash, config, updated) VALUES('a1', 'h', '{}', 't')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`PRAGMA user_version = 0`); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	if s, err = OpenSQLite(path, DefaultRetention()); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	if s.db.QueryRow(`SELECT COUNT(*) FROM agents WHERE id='a1'`).Scan(&n); n != 1 || version(s) != baseVersion {
+		t.Fatalf("Altdatenbank: %d Agenten, Version %d", n, version(s))
+	}
 	s.Close()
 
 	old := migrations
