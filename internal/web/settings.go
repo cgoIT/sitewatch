@@ -121,6 +121,9 @@ func (s *Server) settingsExport(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
-	_ = enc.Encode(f)
-	log.Print("settings: Konfiguration exportiert")
+	if err := enc.Encode(f); err != nil {
+		log.Printf("settings: Export abgebrochen: %v", err)
+		return
+	}
+	log.Printf("settings: Konfiguration exportiert (%d Agenten)", len(f.Agents))
 }

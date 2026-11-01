@@ -146,6 +146,9 @@ func (s *Store) Import(in []Agent) error {
 			return fmt.Errorf("Agent %q: ungültige oder doppelte ID", a.ID)
 		}
 		seen[a.ID] = true
+		if a.Updated.IsZero() {
+			return fmt.Errorf("Agent %q: Änderungszeit fehlt", a.ID)
+		}
 		if len(a.TokenHash) != 64 || strings.Trim(a.TokenHash, "0123456789abcdef") != "" {
 			return fmt.Errorf("Agent %q: ungültiger Token-Hash", a.ID)
 		}
@@ -180,7 +183,12 @@ func (s *Store) Import(in []Agent) error {
 	if len(have) > 0 {
 		return errors.New("es gibt schon Agenten; eine Sicherung wird nur in eine leere Installation übernommen")
 	}
-	return s.save(in)
+	if err := s.save(in); err != nil {
+		return err
+	}
+	// Eine alte agents.json soll danach nicht mehr eingemischt werden (siehe ImportFile).
+	_, err = s.db.Exec(`INSERT OR REPLACE INTO meta(key, value) VALUES('agents_imported', ?)`, time.Now().UTC().Format(time.RFC3339))
+	return err
 }
 
 // List liefert alle Agenten nach ID sortiert.

@@ -37,7 +37,7 @@ func Export(as *agents.Store, cfg status.Config, now time.Time) (File, error) {
 	return f, nil
 }
 
-// Settings schreibt die Schwellwerte; ein leeres vals bedeutet Standardwerte.
+// Settings nimmt die Schwellwerte auf (store.SQLite).
 type Settings interface {
 	SetSetting(key, value string) error
 }
@@ -63,12 +63,16 @@ func Import(data []byte, as *agents.Store, set Settings) error {
 	if as == nil {
 		return errors.New("Agenten sind nicht eingeschaltet")
 	}
-	if err := as.Import(f.Agents); err != nil { // prüft und schreibt in einer Transaktion
-		return err
+	if len(f.Thresholds) > 0 {
+		if set == nil {
+			return errors.New("kein Speicher für die Schwellwerte")
+		}
+		// Zuerst die Schwellwerte: Sie lassen sich beliebig oft überschreiben. Scheitern danach die Agenten, ist die
+		// Installation noch leer und der Import wiederholbar.
+		b, _ := json.Marshal(f.Thresholds) // map[string]int kann nicht scheitern
+		if err := set.SetSetting(ThresholdsKey, string(b)); err != nil {
+			return err
+		}
 	}
-	if len(f.Thresholds) == 0 {
-		return nil
-	}
-	b, _ := json.Marshal(f.Thresholds) // map[string]int kann nicht scheitern
-	return set.SetSetting(ThresholdsKey, string(b))
+	return as.Import(f.Agents) // prüft alles vorab und schreibt in einer Transaktion
 }

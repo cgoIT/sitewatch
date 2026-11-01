@@ -102,3 +102,41 @@ func TestRefusesInternalTargets(t *testing.T) {
 		t.Error("Zertifikatsprüfung an Loopback ohne Fehler")
 	}
 }
+
+func TestRefuseInternalTable(t *testing.T) {
+	for addr, wantErr := range map[string]bool{
+		"127.0.0.1:443": true, "[::1]:443": true, "10.0.0.1:443": true, "169.254.169.254:80": true, "100.64.0.1:443": true,
+		"[fd00::1]:443": true, "[::ffff:127.0.0.1]:443": true, "[::ffff:10.0.0.1]:443": true, "0.1.2.3:443": true,
+		"[64:ff9b::a00:1]:443": true, "198.18.0.1:443": true,
+		"8.8.8.8:443": false, "[2001:4860::1]:443": false,
+	} {
+		if err := refuseInternal("tcp", addr, nil); (err != nil) != wantErr {
+			t.Errorf("%s: Fehler=%v, erwartet %v", addr, err, wantErr)
+		}
+	}
+}
+
+func TestTarget(t *testing.T) {
+	for raw, ok := range map[string]bool{"https://a.example": true, "https://a.example:8443/x": true, "http://a.example": false, "https://": false, "::": false} {
+		if _, _, err := target(raw); (err == nil) != ok {
+			t.Errorf("%q: %v", raw, err)
+		}
+	}
+}
+
+// Schlägt die Prüfung später fehl oder ändert sich die Adresse, darf kein altes Ablaufdatum übrig bleiben.
+func TestStaleExpiryDropped(t *testing.T) {
+	p, _, srv, now := setup(t, http.NotFoundHandler())
+	r := &report.Report{Site: report.Site{ID: "kunde-b"}}
+	p.Once(context.Background())
+	if p.Overlay(r); r.Site.TLSExpires == nil {
+		t.Fatal("kein Ablaufdatum ermittelt")
+	}
+	srv.Close() // nächste Prüfung scheitert
+	p.Now = func() time.Time { return now.Add(7 * time.Hour) }
+	p.Once(context.Background())
+	r = &report.Report{Site: report.Site{ID: "kunde-b"}}
+	if p.Overlay(r); r.Site.TLSExpires != nil {
+		t.Error("veraltetes Ablaufdatum bleibt stehen")
+	}
+}

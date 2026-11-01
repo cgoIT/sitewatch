@@ -83,3 +83,11 @@ func TestImportRejects(t *testing.T) {
 		t.Errorf("gültige Datei: %v", err)
 	}
 }
+
+func TestImportWithoutSettingsStore(t *testing.T) {
+	as, _ := fresh(t)
+	data := `{"version":1,"agents":[],"thresholds":{"tls_warn_days":30}}`
+	if err := Import([]byte(data), as, nil); err == nil {
+		t.Error("ohne Speicher für Schwellwerte kein Fehler")
+	}
+}

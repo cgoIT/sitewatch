@@ -13,6 +13,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"sync"
 	"syscall"
@@ -45,7 +46,17 @@ type Prober struct {
 	expires  map[string]time.Time // Site-ID → Ablauf des Zertifikats
 	checked  map[string]time.Time // Site-ID → letzte Zertifikatsprüfung
 	lastPing map[string]time.Time
+	urls     map[string]string // Site-ID → Adresse, für die expires gilt
 }
+
+// blocked sind Bereiche, die IsPrivate, IsLoopback und Co. nicht abdecken, aber nicht öffentlich erreichbar sind oder interne
+// IPv4-Adressen einbetten (NAT64, 6to4, Teredo).
+var blocked = func() (out []netip.Prefix) {
+	for _, s := range []string{"0.0.0.0/8", "100.64.0.0/10", "192.0.0.0/24", "198.18.0.0/15", "240.0.0.0/4", "64:ff9b::/96", "2002::/16", "2001::/32"} {
+		out = append(out, netip.MustParsePrefix(s))
+	}
+	return out
+}()
 
 // refuseInternal ist die Control-Funktion des Dialers: Sie sieht die aufgelöste Adresse und verhindert so, dass ein
 // Hostname (auch nach einem DNS-Wechsel) auf interne Ziele führt.
@@ -54,8 +65,16 @@ func refuseInternal(_, address string, _ syscall.RawConn) error {
 	if err != nil {
 		return err
 	}
-	ip := net.ParseIP(host)
-	if ip == nil || ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() || ip.IsMulticast() {
+	ip, err := netip.ParseAddr(host)
+	if err != nil {
+		return err
+	}
+	ip = ip.Unmap() // ::ffff:10.0.0.1 wie 10.0.0.1 behandeln
+	bad := ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() || ip.IsMulticast()
+	for _, p := range blocked {
+		bad = bad || p.Contains(ip)
+	}
+	if bad {
 		return fmt.Errorf("Ziel %s ist keine öffentliche Adresse", host)
 	}
 	return nil
@@ -124,7 +143,7 @@ func (p *Prober) Ping(ctx context.Context, raw string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	return resp.StatusCode, nil
 }
 
@@ -142,6 +161,7 @@ func (p *Prober) Overlay(r *report.Report) {
 }
 
 // Once macht einen Durchlauf über alle Contao-Bundles mit Adresse.
+// shortcut: seriell, bei vielen Seiten mit hängenden Servern (bis 20 s je Seite) dauert ein Durchlauf länger als der Takt; dann je Seite nebenläufig.
 func (p *Prober) Once(ctx context.Context) {
 	as, err := p.Agents.List()
 	if err != nil {
@@ -149,6 +169,8 @@ func (p *Prober) Once(ctx context.Context) {
 		return
 	}
 	now := p.Now()
+	active := map[string]bool{}
+	defer func() { p.forgetExcept(active) }()
 	for _, a := range as {
 		if !a.Bundle() || len(a.Config.Sites) != 1 || a.Config.Sites[0].URL == "" {
 			continue
@@ -157,13 +179,40 @@ func (p *Prober) Once(ctx context.Context) {
 		if _, _, err := target(raw); err != nil {
 			continue // http-Adressen werden weder geprüft noch aufgerufen
 		}
+		active[id] = true
 		p.checkCert(ctx, id, raw, now)
 		p.wake(ctx, id, raw, a.Updated, now)
 	}
 }
 
+// forgetExcept verwirft alle Merkwerte von Sites, die nicht mehr geprüft werden (gelöscht, ohne https-Adresse).
+func (p *Prober) forgetExcept(active map[string]bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, m := range []map[string]time.Time{p.expires, p.checked, p.lastPing} {
+		for id := range m {
+			if !active[id] {
+				delete(m, id)
+			}
+		}
+	}
+	for id := range p.urls {
+		if !active[id] {
+			delete(p.urls, id)
+		}
+	}
+}
+
 func (p *Prober) checkCert(ctx context.Context, id, raw string, now time.Time) {
 	p.mu.Lock()
+	if p.urls[id] != raw { // andere Adresse: bisherige Werte gelten nicht mehr
+		if p.urls == nil {
+			p.urls = map[string]string{}
+		}
+		p.urls[id] = raw
+		delete(p.expires, id)
+		delete(p.checked, id)
+	}
 	due := now.Sub(p.checked[id]) >= tlsEvery
 	if due {
 		if p.checked == nil {
@@ -178,6 +227,9 @@ func (p *Prober) checkCert(ctx context.Context, id, raw string, now time.Time) {
 	t, err := p.CertExpiry(ctx, raw)
 	if err != nil {
 		log.Printf("probe: Zertifikat von %q: %v", id, err)
+		p.mu.Lock()
+		delete(p.expires, id) // lieber unbekannt als ein veralteter Wert
+		p.mu.Unlock()
 		return
 	}
 	p.mu.Lock()
