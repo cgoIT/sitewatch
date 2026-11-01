@@ -252,7 +252,7 @@ func (s *Server) rows(base map[string]store.Sample) ([]row, tiles, error) {
 		if rank[rows[i].Level] != rank[rows[j].Level] {
 			return rank[rows[i].Level] < rank[rows[j].Level]
 		}
-		return rows[i].Name < rows[j].Name
+		return lessFold(rows[i].Name, rows[j].Name)
 	})
 	return rows, t, nil
 }
@@ -415,6 +415,14 @@ func (s *Server) detail(w http.ResponseWriter, r *http.Request) {
 		"Maintenance": maintenanceLabel(rep.Site.MaintenanceMode, rep.Site.MaintenanceSince),
 		"Orphan":      s.orphan(id),
 	})
+}
+
+// lessFold sortiert ohne Rücksicht auf Groß- und Kleinschreibung; bei Gleichheit entscheidet die genaue Schreibweise, damit die Reihenfolge stabil bleibt.
+func lessFold(a, b string) bool {
+	if la, lb := strings.ToLower(a), strings.ToLower(b); la != lb {
+		return la < lb
+	}
+	return a < b
 }
 
 // orphan: Reports sind gespeichert, aber kein Agent hat die Site (mehr) in seiner Konfiguration.

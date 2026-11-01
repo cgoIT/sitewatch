@@ -28,7 +28,7 @@ func (s *Server) siteIDs() ([]string, error) {
 		return nil, nil
 	}
 	ids, err := s.Agents.SiteIDs()
-	sort.Strings(ids)
+	sort.Slice(ids, func(i, j int) bool { return lessFold(ids[i], ids[j]) })
 	return slices.Compact(ids), err
 }
 
@@ -254,8 +254,10 @@ func (s *Server) toForm(i int, st agentcfg.Site, agent string) siteForm {
 }
 
 func (s *Server) editPage(w http.ResponseWriter, a agents.Agent, cfg agentcfg.Remote, msg string, code int) {
-	forms := make([]siteForm, 0, len(cfg.Sites)+1)
-	for i, st := range cfg.Sites {
+	sites := slices.Clone(cfg.Sites) // alphabetisch nach ID; die gespeicherte Reihenfolge bleibt unberührt
+	sort.SliceStable(sites, func(i, j int) bool { return lessFold(sites[i].ID, sites[j].ID) })
+	forms := make([]siteForm, 0, len(sites)+1)
+	for i, st := range sites {
 		forms = append(forms, s.toForm(i, st, a.ID))
 	}
 	forms = append(forms, siteForm{N: len(forms), Kind: "contao"}) // leere Zeile für eine neue Site

@@ -87,7 +87,7 @@ func buildMatrices(entries []store.Entry, ids []string, now time.Time, cfg statu
 		params.Rows = append(params.Rows, matrixRow{id, id, false, make([]cell, len(params.Heads))})
 	}
 	for _, m := range []*matrix{&versions, &params} {
-		sort.SliceStable(m.Rows, func(i, j int) bool { return m.Rows[i].Name < m.Rows[j].Name })
+		sort.SliceStable(m.Rows, func(i, j int) bool { return lessFold(m.Rows[i].Name, m.Rows[j].Name) })
 		for _, r := range m.Rows {
 			for i, c := range r.Cells {
 				if c.Text == "" {

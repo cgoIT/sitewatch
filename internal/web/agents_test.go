@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -349,5 +350,13 @@ func TestDeleteOrphanSite(t *testing.T) {
 	}
 	if b := do(srv, "GET", "/", nil, nil).Body.String(); strings.Contains(b, "kunde-c") {
 		t.Error("Site steht noch in der Übersicht")
+	}
+}
+
+func TestLessFold(t *testing.T) {
+	names := []string{"beta", "Zeta", "alpha", "Alpha", "Beta"}
+	sort.SliceStable(names, func(i, j int) bool { return lessFold(names[i], names[j]) })
+	if got := strings.Join(names, " "); got != "Alpha alpha Beta beta Zeta" {
+		t.Errorf("Reihenfolge: %s", got)
 	}
 }
