@@ -17,6 +17,7 @@ func (f *fakeStore) Save(store.Entry, int) error                          { retu
 func (f *fakeStore) Latest() ([]store.Entry, error)                       { return f.entries, nil }
 func (f *fakeStore) Get(string) (store.Entry, bool, error)                { return store.Entry{}, false, nil }
 func (f *fakeStore) Baselines(time.Time) (map[string]store.Sample, error) { return nil, nil }
+func (f *fakeStore) DeleteSite(string) error                              { return nil }
 func (f *fakeStore) Days(string) ([]string, error)                        { return nil, nil }
 func (f *fakeStore) GetDay(string, string) (store.Entry, bool, error) {
 	return store.Entry{}, false, nil

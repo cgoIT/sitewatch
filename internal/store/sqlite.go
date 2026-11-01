@@ -295,6 +295,29 @@ func (s *SQLite) AlertState() (map[string]bool, error) {
 	return out, rows.Err()
 }
 
+// DeleteSite entfernt alle Daten der Site: Tagesstände, Verlauf, Alarmzustand und Aufträge samt Ausgabe. Gibt es nichts, ist das kein Fehler.
+func (s *SQLite) DeleteSite(siteID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, q := range []string{
+		`DELETE FROM job_chunks WHERE job_id IN (SELECT id FROM jobs WHERE site=?)`,
+		`DELETE FROM jobs WHERE site=?`,
+		`DELETE FROM daily_reports WHERE site_id=?`,
+		`DELETE FROM samples WHERE site_id=?`,
+		`DELETE FROM alert_state WHERE site_id=?`,
+	} {
+		if _, err := tx.Exec(q, siteID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
 // SetAlerted merkt sich (on) oder vergisst (!on), dass für die Site ein Alarm ausgelöst wurde, damit er nicht bei jeder Prüfung neu kommt.
 func (s *SQLite) SetAlerted(siteID string, on bool) error {
 	s.mu.Lock()

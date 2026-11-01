@@ -311,3 +311,43 @@ func TestSettingsExport(t *testing.T) {
 		t.Error("Export darf nicht per GET erreichbar sein")
 	}
 }
+
+// Eine Site ohne Agent ist verwaist und lässt sich samt Daten entfernen; Sites eines Agenten nicht.
+func TestDeleteOrphanSite(t *testing.T) {
+	srv, tok, now := setup(t)
+	rep := report.Report{Schema: 1, CollectedAt: now, Site: report.Site{ID: "kunde-c", Kind: "contao"}}
+	if w := post(srv, tok, rep); w.Code != http.StatusNoContent {
+		t.Fatalf("Report: %d", w.Code)
+	}
+	del := func() int { return do(srv, "POST", "/sites/kunde-c/delete", url.Values{"confirm": {"1"}}, nil).Code }
+	if c := del(); c != http.StatusConflict {
+		t.Errorf("Site eines Agenten: %d", c)
+	}
+	if b := do(srv, "GET", "/sites/kunde-c", nil, nil).Body.String(); strings.Contains(b, "Verwaiste Site") {
+		t.Error("Löschen für Site eines Agenten angeboten")
+	}
+	if err := srv.Agents.Delete("kunde-c"); err != nil {
+		t.Fatal(err)
+	}
+	if b := do(srv, "GET", "/sites/kunde-c", nil, nil).Body.String(); !strings.Contains(b, "Verwaiste Site") {
+		t.Error("Löschen für verwaiste Site nicht angeboten")
+	}
+	if b := do(srv, "GET", "/", nil, nil).Body.String(); !strings.Contains(b, "verwaist") {
+		t.Error("Übersicht kennzeichnet die verwaiste Site nicht")
+	}
+	if w := do(srv, "POST", "/sites/kunde-c/delete", url.Values{}, nil); w.Code != http.StatusNotFound {
+		t.Errorf("ohne Bestätigung: %d", w.Code)
+	}
+	if c := del(); c != http.StatusSeeOther {
+		t.Fatalf("Löschen: %d", c)
+	}
+	if _, ok, _ := srv.Store.Get("kunde-c"); ok {
+		t.Error("Reports sind noch da")
+	}
+	if h, _ := srv.Store.History("kunde-c", 0); len(h) != 0 {
+		t.Error("Verlauf ist noch da")
+	}
+	if b := do(srv, "GET", "/", nil, nil).Body.String(); strings.Contains(b, "kunde-c") {
+		t.Error("Site steht noch in der Übersicht")
+	}
+}

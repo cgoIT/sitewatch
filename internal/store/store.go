@@ -74,4 +74,5 @@ type Store interface {
 	GetDay(siteID, day string) (Entry, bool, error)       // Tagesstand eines Tages
 	History(siteID string, limit int) ([]Sample, error)   // neueste zuerst
 	Baselines(since time.Time) (map[string]Sample, error) // je Site der älteste Punkt ab since
+	DeleteSite(siteID string) error                       // entfernt alle Daten einer Site (Reports, Verlauf, Alarmzustand, Aufträge)
 }

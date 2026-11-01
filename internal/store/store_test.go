@@ -238,3 +238,40 @@ func TestSettings(t *testing.T) {
 		t.Error("nicht gelöscht")
 	}
 }
+
+func TestDeleteSite(t *testing.T) {
+	s := open(t)
+	t0 := time.Date(2026, 10, 27, 10, 0, 0, 0, time.UTC)
+	for _, id := range []string{"a", "b"} {
+		if err := s.Save(entry(id, t0, 1, nil), 0); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.SetAlerted(id, true); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.CreateJob(Job{ID: "j-" + id, Agent: "ag", Site: id, Action: "site-status", CreatedAt: t0, ExpiresAt: t0.Add(time.Hour)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.DeleteSite("a"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, _ := s.Get("a"); ok {
+		t.Error("Report von a noch da")
+	}
+	if h, _ := s.History("a", 0); len(h) != 0 {
+		t.Error("Verlauf von a noch da")
+	}
+	if _, ok, _ := s.GetJob("j-a"); ok {
+		t.Error("Auftrag von a noch da")
+	}
+	if _, ok, _ := s.Get("b"); !ok {
+		t.Error("Report von b wurde mitgelöscht")
+	}
+	if _, ok, _ := s.GetJob("j-b"); !ok {
+		t.Error("Auftrag von b wurde mitgelöscht")
+	}
+	if err := s.DeleteSite("gibt-es-nicht"); err != nil {
+		t.Errorf("unbekannte Site: %v", err)
+	}
+}

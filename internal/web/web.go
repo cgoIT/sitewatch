@@ -9,6 +9,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -82,6 +83,7 @@ func (s *Server) Handler() http.Handler {
 	ui := http.NewServeMux()
 	ui.HandleFunc("GET /{$}", s.overview)
 	ui.HandleFunc("GET /sites/{id}", s.detail)
+	ui.HandleFunc("POST /sites/{id}/delete", s.siteDelete)
 	if s.TestMail != nil {
 		ui.HandleFunc("POST /alert-test", s.testMail)
 	}
@@ -169,6 +171,7 @@ type row struct {
 	Reasons                          []string
 	Maintenance                      bool
 	Reported                         bool // es gibt einen Report, nur dann gibt es eine Detailseite
+	Orphan                           bool // Reports sind da, aber kein Agent ist mehr für die Site eingetragen
 	UpdatesTrend                     *arrow
 }
 
@@ -187,7 +190,10 @@ func (s *Server) rows(base map[string]store.Sample) ([]row, tiles, error) {
 		return nil, tiles{}, err
 	}
 	now := s.Now()
-	seen := map[string]bool{}
+	seen, known := map[string]bool{}, map[string]bool{}
+	for _, id := range ids {
+		known[id] = true
+	}
 	var rows []row
 	var t tiles
 	for _, e := range entries {
@@ -199,6 +205,10 @@ func (s *Server) rows(base map[string]store.Sample) ([]row, tiles, error) {
 			Updates: "–", Errors: "–", Seen: status.Ago(now.Sub(e.ReceivedAt)),
 			Reasons:     res.Reasons,
 			Maintenance: rep.Site.MaintenanceMode != nil && *rep.Site.MaintenanceMode, Reported: true,
+			Orphan: s.Agents != nil && !known[rep.Site.ID],
+		}
+		if rw.Orphan {
+			rw.Reasons = append(rw.Reasons, "Gehört zu keinem Agenten mehr (verwaist), auf der Detailseite entfernbar")
 		}
 		if rep.Site.Kind == "contao" {
 			if rep.Agent.Type != report.AgentContaoBundle { // das Bundle prüft keine Updates: "–" statt einer falschen 0
@@ -403,7 +413,37 @@ func (s *Server) detail(w http.ResponseWriter, r *http.Request) {
 		"Seen": status.Ago(s.Now().Sub(cur.ReceivedAt)),
 		"Day":  day, "DayLabel": dayLabel(day), "Days": dayOptions(days, day),
 		"Maintenance": maintenanceLabel(rep.Site.MaintenanceMode, rep.Site.MaintenanceSince),
+		"Orphan":      s.orphan(id),
 	})
+}
+
+// orphan: Reports sind gespeichert, aber kein Agent hat die Site (mehr) in seiner Konfiguration.
+func (s *Server) orphan(id string) bool {
+	if s.Agents == nil {
+		return false
+	}
+	ids, err := s.siteIDs()
+	return err == nil && !slices.Contains(ids, id)
+}
+
+// siteDelete entfernt eine verwaiste Site mit allen Daten. Sites eines Agenten bleiben geschützt; man löscht den Agenten oder die Site aus seiner Konfiguration.
+func (s *Server) siteDelete(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if r.FormValue("confirm") == "" || !report.ValidID(id) {
+		http.NotFound(w, r)
+		return
+	}
+	if !s.orphan(id) {
+		http.Error(w, "die Site gehört noch zu einem Agenten", http.StatusConflict)
+		return
+	}
+	if err := s.Store.DeleteSite(id); err != nil {
+		log.Printf("sites: %q löschen: %v", id, err)
+		http.Error(w, "interner Fehler", http.StatusInternalServerError)
+		return
+	}
+	log.Printf("sites: verwaiste Site %q mit allen Daten entfernt", id)
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
 type dayOption struct {
