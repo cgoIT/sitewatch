@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/cgoIT/sitewatch/compare/v0.6.0...v0.6.1) (2026-11-01)
+
+
+### Bug Fixes
+
+* Sites ohne Rücksicht auf Groß-/Kleinschreibung sortieren, Sites eines Agenten alphabetisch anzeigen ([9fc7e23](https://github.com/cgoIT/sitewatch/commit/9fc7e2321ab3a3ba959fb680b668b9bea8cdbc0b))
+
 ## [0.6.0](https://github.com/cgoIT/sitewatch/compare/v0.5.0...v0.6.0) (2026-11-01)
 
 
