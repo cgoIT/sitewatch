@@ -14,6 +14,7 @@ Sprache der UI, Texte und Kommentare: Deutsch. Code-Bezeichner: Englisch bzw. wi
 
 ## Konventionen
 - Möglichst Standardbibliothek; neue Abhängigkeiten nur mit Grund (SQLite-Treiber ist der erste Kandidat).
+- Das Datenbankschema ändert man nur über einen Eintrag in `migrations` (`internal/store/sqlite.go`, `PRAGMA user_version`), nie durch Ändern von `schema`; eine neuere Datenbank lehnt das Programm ab.
 - `go vet ./... && go test ./...` müssen grün sein, `gofmt` sauber.
 - Alles in `testdata/` und `scripts/demo.sh` sind Beispieldaten/Stubs und als solche zu kennzeichnen.
 - Fehlende Daten sind `nil`/leer, nie geraten. Was der Agent nicht ermitteln konnte, steht in `site.problems`.
