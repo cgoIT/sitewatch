@@ -146,7 +146,7 @@ Der Aufruf ist ein einfaches GET ohne Daten; Weiterleitungen und Ziele in privat
 - **Datensicherung:** Alles liegt in `<data>/sitewatch.db` (SQLite) und `<data>/signing.key`. Die Datenbank sichert man im laufenden Betrieb mit
   `sqlite3 sitewatch.db "VACUUM INTO '/ziel/sitewatch.db'"`; `signing.key` ist eine Datei (Rechte 0600) und gehört in dieselbe Sicherung.
 - **Konfiguration exportieren:** Unter „Einstellungen“ → „Sicherung“ liefert „Konfiguration exportieren“ eine JSON-Datei mit den Agenten
-  (samt Token-Hash) und den Schwellwerten, ohne Reports und ohne Signierschlüssel. Die Datei ist so schützenswert wie die Datenbank.
+  (samt Token-Hash) und den Schwellwerten, ohne Reports und ohne Signierschlüssel. Die Datei ist so schützenswert wie die Datenbank. Der Export hängt am Login der Oberfläche; wer Sitewatch ohne Login betreibt (`-no-login`, nur zum Entwickeln), macht ihn für alle erreichbar.
 - **Umzug:** Auf dem neuen Server `signing.key` ins Datenverzeichnis legen (sonst lehnen die Agenten neue Konfigurationen ab) und die Datei
   einmalig einspielen: `sitewatch serve -data … -import sitewatch-2026-11-01.json`. Das geht nur in eine Installation ohne Agenten; eine
   fehlerhafte Datei wird vollständig abgelehnt. Die Token der Agenten bleiben gültig, eine Änderung an den Agenten ist nicht nötig.
