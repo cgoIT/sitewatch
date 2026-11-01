@@ -1,6 +1,9 @@
 package report
 
 import (
+	"bytes"
+	"encoding/json"
+	"os"
 	"testing"
 	"time"
 )
@@ -35,5 +38,22 @@ func TestValidate(t *testing.T) {
 		if err := r.Validate(now); err == nil {
 			t.Errorf("%s: Fehler erwartet", name)
 		}
+	}
+}
+
+// Beispiel-Report des Contao-Bundles (cgoit/contao-sitewatch-bundle, Beispieldaten): fängt Schema-Abweichungen zwischen Bundle und Sitewatch ab.
+func TestContaoBundleReportMatchesSchema(t *testing.T) {
+	data, err := os.ReadFile("../../testdata/contao-bundle-report.example.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var r Report
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&r); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Validate(r.CollectedAt); err != nil {
+		t.Fatal(err)
 	}
 }

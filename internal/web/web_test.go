@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"sitewatch/internal/auth"
+	"sitewatch/internal/agents"
 	"sitewatch/internal/report"
 	"sitewatch/internal/status"
 	"sitewatch/internal/store"
@@ -23,18 +23,23 @@ func setup(t *testing.T) (*Server, string, time.Time) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tokens := filepath.Join(dir, "tokens.json")
-	tok, err := auth.Add(tokens, "kunde-c")
+	now := time.Date(2026, 10, 27, 19, 0, 0, 0, time.UTC)
+	srv := New(st, status.DefaultConfig())
+	srv.Now = func() time.Time { return now }
+	if srv.Agents, err = agents.Open(st.DB()); err != nil {
+		t.Fatal(err)
+	}
+	tok, err := srv.Agents.CreateBundle("kunde-c", "", "", now) // ein Token für die Site kunde-c
 	if err != nil {
 		t.Fatal(err)
 	}
-	now := time.Date(2026, 10, 27, 19, 0, 0, 0, time.UTC)
-	srv := New(st, tokens, status.DefaultConfig())
-	srv.Now = func() time.Time { return now }
 	return srv, tok, now
 }
 
 func post(srv *Server, token string, rep report.Report) *httptest.ResponseRecorder {
+	if rep.Agent.Type == "" { // setup legt einen Bundle-Agenten an, dessen Typ der Report tragen muss
+		rep.Agent.Type = report.AgentContaoBundle
+	}
 	body, _ := json.Marshal(rep)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/reports", bytes.NewReader(body))
 	if token != "" {
@@ -90,6 +95,7 @@ func TestIngestRejects(t *testing.T) {
 		t.Errorf("ungültiges Schema: %d", w.Code)
 	}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/reports", strings.NewReader("{kaputt"))
+	req.Header.Set("Authorization", "Bearer "+tok)
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 	if w.Code != http.StatusBadRequest {

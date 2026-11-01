@@ -7,8 +7,10 @@ Sprache der UI, Texte und Kommentare: Deutsch. Code-Bezeichner: Englisch bzw. wi
 - **Nur ausgehende Verbindungen von den Agenten.** Auf Zielservern wird kein Port geöffnet. Reports werden gepusht; Aufträge holt der Agent später per Polling ab (optional später WebSocket mit Polling-Fallback).
 - Agent in Go, ein statisches Binary pro Server. PHP-Bundle/Cron-Skript nur für Shared Hosting, gleiches JSON-Schema (`internal/report`).
 - Sitewatch in Go, server-gerenderte Oberfläche (html/template, kein SPA). Ziel-Datenbank: SQLite hinter dem Interface `store.Store`.
+- **Agent-Typen:** Server-Agent (`go-host`) und Contao-Bundle (`contao-bundle`, `report.AgentContaoBundle`). Das Bundle ist ein Agent mit genau einer Site (Site-ID = Agent-ID), holt keine Konfiguration und keine Aufträge; für seine Reports gelten eigene Schwellwerte (`BundleStaleAfter`).
+- **Weckruf statt Endpunkt.** Für Seiten ohne Server-Cron (PHP-Bundle `cgoit/contao-sitewatch-bundle`, eigenes Repo) darf Sitewatch die öffentliche Seiten-URL anpingen, wenn der Report überfällig ist. Der Ping trägt keine Daten und keine Aufträge, das Bundle hat keinen eigenen Endpunkt; der Report geht weiterhin vom Bundle zu Sitewatch. Aufträge per Ping sind ausgeschlossen. Pro Site optional (`ping_url`), nur https, kurzer Timeout, keine Weiterleitung auf interne Adressen.
 - **Zuerst lesend.** Schreibende Aktionen (Wartungsmodus, Updates) erst nach Sicherheitskonzept: feste Aktionsliste, keine freie Shell, signierte Aufträge (Ed25519) mit Ablaufzeit, Freigabe im Dashboard.
-- Tokens nie im Klartext speichern (nur SHA-256-Hash). Sitewatch ist das einzige eingehend erreichbare Ziel und muss entsprechend gehärtet werden.
+- Tokens nie im Klartext speichern (nur SHA-256-Hash). Agenten samt Token-Hash stehen in der SQLite-Datenbank (Tabelle `agents`); `tokens.json` und `sitewatch token` gibt es nicht mehr, `agents.json` wird nur einmalig importiert. Schwellwerte pflegt man im Cockpit (Seite „Einstellungen“, Tabelle `meta`, nur Abweichungen vom Standard); `-thresholds` und `-stale` gibt es nicht mehr. Sitewatch ist das einzige eingehend erreichbare Ziel und muss entsprechend gehärtet werden.
 
 ## Konventionen
 - Möglichst Standardbibliothek; neue Abhängigkeiten nur mit Grund (SQLite-Treiber ist der erste Kandidat).

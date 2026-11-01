@@ -30,23 +30,26 @@ func (l Level) String() string {
 
 // Config enthält die Schwellwerte.
 type Config struct {
-	StaleAfter time.Duration   // keine Meldung seit dieser Zeit = kritisch
-	ErrorWarn  int             // ab so vielen Fehlern im Fenster = Warnung
-	EOLWarn    time.Duration   // Warnung, wenn das PHP-Support-Ende näher als das ist
-	TLSWarn    time.Duration   // Warnung, wenn das Zertifikat in weniger als dieser Zeit abläuft
-	BackupMax  time.Duration   // Warnung, wenn das letzte Backup älter ist
-	DiskWarn   int             // Warnung, wenn weniger als so viel Prozent Speicher frei sind
-	DiskCrit   int             // kritisch, wenn weniger als so viel Prozent frei sind
-	CronWarn   time.Duration   // Warnung, wenn der letzte Contao-Cron-Lauf länger her ist
-	CronCrit   time.Duration   // kritisch, wenn er noch länger her ist
-	MaintWarn  time.Duration   // Warnung, wenn der Wartungsmodus so lange an ist
-	MaintCrit  time.Duration   // kritisch, wenn er noch länger an ist (vergessen)
-	Retention  store.Retention // Aufbewahrung des Verlaufs und der Tagesstände (siehe store)
-	EOL        EOLSource       // optional: aktuelle Support-Enden (z. B. endoflife.date); nil = nur die eingebaute PHP-Tabelle
+	StaleAfter time.Duration // keine Meldung seit dieser Zeit = kritisch
+	// BundleStaleAfter ersetzt StaleAfter für Reports des Contao-Bundles: Es meldet nur stündlich und über den Contao-Cron,
+	// der bei wenig Besuchern verzögert läuft.
+	BundleStaleAfter time.Duration
+	ErrorWarn        int             // ab so vielen Fehlern im Fenster = Warnung
+	EOLWarn          time.Duration   // Warnung, wenn das PHP-Support-Ende näher als das ist
+	TLSWarn          time.Duration   // Warnung, wenn das Zertifikat in weniger als dieser Zeit abläuft
+	BackupMax        time.Duration   // Warnung, wenn das letzte Backup älter ist
+	DiskWarn         int             // Warnung, wenn weniger als so viel Prozent Speicher frei sind
+	DiskCrit         int             // kritisch, wenn weniger als so viel Prozent frei sind
+	CronWarn         time.Duration   // Warnung, wenn der letzte Contao-Cron-Lauf länger her ist
+	CronCrit         time.Duration   // kritisch, wenn er noch länger her ist
+	MaintWarn        time.Duration   // Warnung, wenn der Wartungsmodus so lange an ist
+	MaintCrit        time.Duration   // kritisch, wenn er noch länger an ist (vergessen)
+	Retention        store.Retention // Aufbewahrung des Verlaufs und der Tagesstände (siehe store)
+	EOL              EOLSource       // optional: aktuelle Support-Enden (z. B. endoflife.date); nil = nur die eingebaute PHP-Tabelle
 }
 
 func DefaultConfig() Config {
-	return Config{StaleAfter: 15 * time.Minute, ErrorWarn: 10, EOLWarn: 90 * 24 * time.Hour,
+	return Config{StaleAfter: 15 * time.Minute, BundleStaleAfter: 3 * time.Hour, ErrorWarn: 10, EOLWarn: 90 * 24 * time.Hour,
 		TLSWarn: 14 * 24 * time.Hour, BackupMax: 36 * time.Hour, DiskWarn: 15, DiskCrit: 5, CronWarn: 2 * time.Hour, CronCrit: 4 * time.Hour, MaintWarn: 2 * time.Hour, MaintCrit: 8 * time.Hour,
 		Retention: store.DefaultRetention()}
 }
@@ -72,6 +75,9 @@ type Result struct {
 
 // Evaluate bewertet den letzten Report einer Site. receivedAt ist der Eingangszeitpunkt in Sitewatch.
 func Evaluate(r *report.Report, receivedAt, now time.Time, cfg Config) Result {
+	if r.Agent.Type == report.AgentContaoBundle {
+		cfg.StaleAfter = cfg.BundleStaleAfter
+	}
 	var res Result
 	raise := func(l Level, format string, a ...any) {
 		if l > res.Level {

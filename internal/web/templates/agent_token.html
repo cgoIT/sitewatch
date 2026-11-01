@@ -4,7 +4,11 @@
 <main>
 <h1 style="margin:0;font-size:26px;font-weight:600">Token für {{.ID}}</h1>
 <div class="banner">Das Token wird nur jetzt angezeigt. Sitewatch speichert nur den Hash. Seite nicht neu laden und nicht zurückgehen.</div>
-<section class="card"><h2>Lokale Datei auf dem Server (<span class="mono">bootstrap.json</span>, chmod 600)</h2><div class="pad">
+{{if .Bundle}}<section class="card"><h2>Block für <span class="mono">config/config.yaml</span> der Contao-Installation</h2><div class="pad">
+<pre class="code">{{.Snippet}}</pre>
+<p class="muted" style="font-size:13px">Das Token steht nur auf dem Server, nicht im Repository der Seite. Alternativ als Umgebungsvariable (<span class="mono">token: '%env(SITEWATCH_TOKEN)%'</span>). Das Bundle <span class="mono">cgoit/contao-sitewatch-bundle</span> muss installiert sein; der erste Report kommt mit dem nächsten Contao-Cron-Lauf.</p>
+<a href="/agents/{{.ID}}">Weiter zum Contao-Bundle</a>
+</div></section>{{else}}<section class="card"><h2>Lokale Datei auf dem Server (<span class="mono">bootstrap.json</span>, chmod 600)</h2><div class="pad">
 <pre class="code">{
   "sitewatch": "{{.Sitewatch}}",
   "agent": "{{.ID}}",
@@ -19,5 +23,5 @@
 <p class="muted" style="font-size:13px"><span class="mono">roots</span> legt fest, unter welchen Verzeichnissen der Agent Pfade aus Sitewatch akzeptiert. Optional: <span class="mono">composer</span>, <span class="mono">php</span>, <span class="mono">nginx</span>, <span class="mono">mariadb</span> (Programme bleiben bewusst lokal). Angekreuzte Programme zeigen auf die Docker-Wrapper aus dem Paket <span class="mono">sitewatch-agent</span>; fehlt eine Zeile, nutzt der Agent das Programm direkt auf dem Host.
 Start: <span class="mono">sitewatch-agent -bootstrap bootstrap.json</span>. Der öffentliche Schlüssel prüft die Signatur der Konfiguration.</p>
 <a href="/agents/{{.ID}}">Weiter zur Konfiguration der Sites</a>
-</div></section>
+</div></section>{{end}}
 </main>{{template "foot"}}</body></html>

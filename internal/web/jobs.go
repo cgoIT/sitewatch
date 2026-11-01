@@ -310,6 +310,9 @@ func (s *Server) contaoSites() ([]siteChoice, error) {
 	}
 	var out []siteChoice
 	for _, a := range as {
+		if a.Bundle() { // meldet nur, holt keine Aufträge ab
+			continue
+		}
 		for _, st := range a.Config.Sites {
 			if st.Kind == "host" {
 				continue

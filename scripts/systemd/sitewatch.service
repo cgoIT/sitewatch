@@ -5,8 +5,7 @@
 #   install -m 0755 sitewatch /usr/bin/sitewatch
 #   install -d -m 0750 -o root -g sitewatch /etc/sitewatch
 #   install -m 0640 -o root -g sitewatch sitewatch.env.example /etc/sitewatch/sitewatch.env   # dann ausfüllen
-# Token anlegen (als derselbe Benutzer, sonst gehört die Datei root):
-#   sudo -u sitewatch /usr/bin/sitewatch token -tokens /var/lib/sitewatch/tokens.json <site-id>
+# Agenten und ihre Tokens legt man im Dashboard unter „Agenten“ an; sie stehen in sitewatch.db.
 # Zugriffsregel, öffentliche URL, Proxy und Alarmierung stehen als SITEWATCH_ARGS in /etc/sitewatch/sitewatch.env.
 [Unit]
 Description=Sitewatch (Überwachung der Websites)
@@ -17,8 +16,8 @@ Wants=network-online.target
 User=sitewatch
 Group=sitewatch
 EnvironmentFile=/etc/sitewatch/sitewatch.env
-ExecStart=/usr/bin/sitewatch serve -addr 127.0.0.1:8080 -data /var/lib/sitewatch -tokens /var/lib/sitewatch/tokens.json $SITEWATCH_ARGS
-# sitewatch.db, Signaturschlüssel (signing.key), agents.json und tokens.json: /var/lib/sitewatch (sichern!)
+ExecStart=/usr/bin/sitewatch serve -addr 127.0.0.1:8080 -data /var/lib/sitewatch $SITEWATCH_ARGS
+# sitewatch.db (Reports, Agenten, Aufträge) und Signaturschlüssel (signing.key): /var/lib/sitewatch (sichern!)
 StateDirectory=sitewatch
 StateDirectoryMode=0750
 Restart=on-failure

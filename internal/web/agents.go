@@ -3,6 +3,7 @@ package web
 import (
 	"crypto/ed25519"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -15,53 +16,39 @@ import (
 
 	"sitewatch/internal/agentcfg"
 	"sitewatch/internal/agents"
-	"sitewatch/internal/auth"
 	"sitewatch/internal/jobs"
 	"sitewatch/internal/report"
 	"sitewatch/internal/sign"
 	"sitewatch/internal/status"
 )
 
-// siteIDs: alle bekannten Sites, auch die ohne Meldung (Token je Site und Sites der Agenten), sortiert und ohne Doppelte.
+// siteIDs: alle bekannten Sites, auch die ohne Meldung (die Sites der Agenten), sortiert und ohne Doppelte.
 func (s *Server) siteIDs() ([]string, error) {
-	tokens, err := auth.Load(s.TokensPath)
-	if err != nil {
-		return nil, err
-	}
-	ids := auth.Sites(tokens)
-	if s.Agents != nil {
-		more, err := s.Agents.SiteIDs()
-		if err != nil {
-			return nil, err
-		}
-		ids = append(ids, more...)
-	}
-	sort.Strings(ids)
-	out := ids[:0]
-	for i, id := range ids {
-		if i == 0 || id != ids[i-1] {
-			out = append(out, id)
-		}
-	}
-	return out, nil
-}
-
-func (s *Server) siteIDsOfTokens() ([]string, error) {
-	tokens, err := auth.Load(s.TokensPath)
-	return auth.Sites(tokens), err
-}
-
-// agentMayReport: das Token gehört zu einem Agenten, in dessen Konfiguration die Site steht.
-func (s *Server) agentMayReport(token, siteID string) bool {
 	if s.Agents == nil {
-		return false
+		return nil, nil
+	}
+	ids, err := s.Agents.SiteIDs()
+	sort.Strings(ids)
+	return slices.Compact(ids), err
+}
+
+// agentByToken liefert den Agenten zum Token.
+func (s *Server) agentByToken(token string) (agents.Agent, bool) {
+	if s.Agents == nil {
+		return agents.Agent{}, false
 	}
 	a, ok, err := s.Agents.ByToken(token)
-	if err != nil || !ok {
+	return a, ok && err == nil
+}
+
+// agentMayReport: die Site steht in der Konfiguration des Agenten und der Typ im Report passt zum Typ des Agenten.
+// Sonst könnte ein Server-Agent sich als Bundle ausgeben und bekäme dessen großzügigere Schwellwerte.
+func agentMayReport(a agents.Agent, rep *report.Report) bool {
+	if a.Bundle() != (rep.Agent.Type == report.AgentContaoBundle) {
 		return false
 	}
 	for _, st := range a.Config.Sites {
-		if st.ID == siteID {
+		if st.ID == rep.Site.ID {
 			return true
 		}
 	}
@@ -128,8 +115,17 @@ func (s *Server) agentRoutes(ui *http.ServeMux) {
 
 type agentRow struct {
 	ID      string
+	Type    string
 	Sites   int
 	Fetched string
+}
+
+// typeLabel: Anzeigename des Agent-Typs.
+func typeLabel(a agents.Agent) string {
+	if a.Bundle() {
+		return "Contao-Bundle"
+	}
+	return "Server-Agent"
 }
 
 func (s *Server) fetchedText(id string) string {
@@ -149,19 +145,56 @@ func (s *Server) agentList(w http.ResponseWriter, r *http.Request) {
 	}
 	rows := make([]agentRow, len(as))
 	for i, a := range as {
-		rows[i] = agentRow{a.ID, len(a.Config.Sites), s.fetchedText(a.ID)}
+		rows[i] = agentRow{a.ID, typeLabel(a), len(a.Config.Sites), s.fetchedText(a.ID)}
+		if a.Bundle() { // holt keine Konfiguration ab
+			rows[i].Fetched = "–"
+		}
 	}
 	s.render(w, "agents.html", map[string]any{"Agents": rows, "Error": r.URL.Query().Get("error")})
 }
 
 func (s *Server) agentCreate(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(r.FormValue("id"))
-	tok, err := s.Agents.Create(id, s.Now())
+	var tok string
+	var err error
+	if r.FormValue("type") == report.AgentContaoBundle {
+		tok, err = s.Agents.CreateBundle(id, strings.TrimSpace(r.FormValue("name")), strings.TrimSpace(r.FormValue("site_url")), s.Now())
+	} else {
+		tok, err = s.Agents.Create(id, s.Now())
+	}
 	if err != nil {
 		http.Redirect(w, r, "/agents?error="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
 	s.showToken(w, r, id, tok)
+}
+
+// baseURL: unter dieser Adresse erreichen die Agenten Sitewatch. Ohne -public-url zählt der Host der Anfrage;
+// X-Forwarded-Proto wird bewusst nicht ausgewertet.
+func (s *Server) baseURL(r *http.Request) string {
+	base := strings.TrimRight(s.PublicURL, "/")
+	if base == "" {
+		base = "https://" + r.Host
+		if strings.HasPrefix(r.Host, "localhost") && r.TLS == nil {
+			base = "http://" + r.Host
+		}
+	}
+	return base
+}
+
+// yamlQuote: einfach quotierter YAML-Text (nur ' wird verdoppelt).
+func yamlQuote(v string) string { return "'" + strings.ReplaceAll(v, "'", "''") + "'" }
+
+// bundleSnippet ist der Block für config/config.yaml des Contao-Bundles.
+func bundleSnippet(base, token string, st agentcfg.Site) string {
+	var b strings.Builder
+	b.WriteString("cgoit_sitewatch:\n")
+	for _, kv := range [][2]string{{"url", base}, {"token", token}, {"site_id", st.ID}, {"site_name", st.Name}, {"site_url", st.URL}} {
+		if kv[1] != "" {
+			fmt.Fprintf(&b, "    %s: %s\n", kv[0], yamlQuote(kv[1]))
+		}
+	}
+	return b.String()
 }
 
 const dockerWrapperDir = "/usr/share/sitewatch-agent/docker/" // Ziel der Pakete sitewatch-agent, siehe packaging/
@@ -181,14 +214,12 @@ func dockerTools(r *http.Request) []map[string]string {
 // showToken zeigt das neue Token einmalig mit dem Block für die lokale Datei des Agenten.
 func (s *Server) showToken(w http.ResponseWriter, r *http.Request, id, tok string) {
 	tools := dockerTools(r)
-	base := strings.TrimRight(s.PublicURL, "/")
-	if base == "" { // ohne -public-url zählt der Host der Anfrage; X-Forwarded-Proto wird bewusst nicht ausgewertet
-		base = "https://" + r.Host
-		if strings.HasPrefix(r.Host, "localhost") && r.TLS == nil {
-			base = "http://" + r.Host
-		}
-	}
+	base := s.baseURL(r)
 	w.Header().Set("Cache-Control", "no-store")
+	if a, err := s.Agents.Get(id); err == nil && a.Bundle() && len(a.Config.Sites) == 1 {
+		s.render(w, "agent_token.html", map[string]any{"ID": id, "Token": tok, "Bundle": true, "Snippet": bundleSnippet(base, tok, a.Config.Sites[0])})
+		return
+	}
 	pub := sign.EncodePublicKey(s.SignKey.Public().(ed25519.PublicKey))
 	s.render(w, "agent_token.html", map[string]any{"ID": id, "Jobs": s.jobsUI(), "Token": tok, "Sitewatch": base, "PublicKey": pub, "Tools": tools})
 }
@@ -238,10 +269,22 @@ func (s *Server) editPage(w http.ResponseWriter, a agents.Agent, cfg agentcfg.Re
 		"Error": msg, "Fetched": s.fetchedText(a.ID), "Channel": s.channelText(a.ID), "Nonce": nonce})
 }
 
+// bundlePage zeigt ein Contao-Bundle: Name und URL ändern, Snippet für config.yaml (ohne das Token, das es nur einmal gibt).
+func (s *Server) bundlePage(w http.ResponseWriter, r *http.Request, a agents.Agent, msg string, code int) {
+	st := a.Config.Sites[0]
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(code)
+	s.render(w, "agent_bundle.html", map[string]any{"Agent": a, "Site": st, "Error": msg,
+		"Snippet": bundleSnippet(s.baseURL(r), "TOKEN-DES-AGENTEN", st)})
+}
+
 func (s *Server) agentEdit(w http.ResponseWriter, r *http.Request) {
 	a, err := s.Agents.Get(r.PathValue("id"))
-	if err != nil {
-		http.NotFound(w, r)
+	if s.agentErr(w, r, err) {
+		return
+	}
+	if a.Bundle() && len(a.Config.Sites) == 1 {
+		s.bundlePage(w, r, a, r.URL.Query().Get("error"), http.StatusOK)
 		return
 	}
 	s.editPage(w, a, a.Config, r.URL.Query().Get("error"), http.StatusOK)
@@ -287,11 +330,20 @@ func parseSites(r *http.Request) agentcfg.Remote {
 
 func (s *Server) agentSave(w http.ResponseWriter, r *http.Request) {
 	a, err := s.Agents.Get(r.PathValue("id"))
-	if err != nil {
-		http.NotFound(w, r)
+	if s.agentErr(w, r, err) {
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	if a.Bundle() && len(a.Config.Sites) == 1 {
+		name, siteURL := strings.TrimSpace(r.FormValue("name")), strings.TrimSpace(r.FormValue("site_url"))
+		if err := s.Agents.UpdateBundle(a.ID, name, siteURL, s.Now()); err != nil {
+			a.Config.Sites[0].Name, a.Config.Sites[0].URL = name, siteURL
+			s.bundlePage(w, r, a, err.Error(), http.StatusUnprocessableEntity)
+			return
+		}
+		http.Redirect(w, r, "/agents/"+a.ID, http.StatusSeeOther)
+		return
+	}
 	// Ein unlesbares oder unvollständiges Formular darf die Konfiguration nicht leeren.
 	if err := r.ParseForm(); err != nil || r.PostForm.Get("count") == "" {
 		http.Error(w, "ungültiges Formular", http.StatusBadRequest)
@@ -307,16 +359,6 @@ func (s *Server) agentSave(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	if ids, err := s.siteIDsOfTokens(); err == nil {
-		for _, st := range cfg.Sites {
-			for _, id := range ids {
-				if st.ID == id {
-					s.editPage(w, a, cfg, fmt.Sprintf("Site %q hat noch ein eigenes Token; erst mit „sitewatch token -remove %s“ löschen", id, id), http.StatusUnprocessableEntity)
-					return
-				}
-			}
-		}
-	}
 	if err := s.Agents.Save(a.ID, cfg, s.Now()); err != nil {
 		s.editPage(w, a, cfg, err.Error(), http.StatusUnprocessableEntity)
 		return
@@ -328,8 +370,7 @@ func (s *Server) agentSave(w http.ResponseWriter, r *http.Request) {
 func (s *Server) agentRotate(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	tok, err := s.Agents.Rotate(id)
-	if err != nil {
-		http.NotFound(w, r)
+	if s.agentErr(w, r, err) {
 		return
 	}
 	log.Printf("agents: Token von %q erneuert", id)
@@ -338,10 +379,27 @@ func (s *Server) agentRotate(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) agentDelete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if r.FormValue("confirm") == "" || !report.ValidID(id) || s.Agents.Delete(id) != nil {
+	if r.FormValue("confirm") == "" || !report.ValidID(id) {
 		http.NotFound(w, r)
+		return
+	}
+	if s.agentErr(w, r, s.Agents.Delete(id)) {
 		return
 	}
 	log.Printf("agents: %q gelöscht", id)
 	http.Redirect(w, r, "/agents", http.StatusSeeOther)
+}
+
+// agentErr beantwortet einen Fehler (404 für unbekannte Agenten, sonst 500) und meldet, ob er einer war.
+func (s *Server) agentErr(w http.ResponseWriter, r *http.Request, err error) bool {
+	switch {
+	case err == nil:
+		return false
+	case errors.Is(err, agents.ErrNotFound):
+		http.NotFound(w, r)
+	default:
+		log.Printf("agents: %v", err)
+		http.Error(w, "interner Fehler", http.StatusInternalServerError)
+	}
+	return true
 }

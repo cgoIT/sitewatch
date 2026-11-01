@@ -5,15 +5,19 @@
 <h1 style="margin:0;font-size:26px;font-weight:600">Agenten</h1>
 {{if .Error}}<div class="banner">{{.Error}}</div>{{end}}
 <section class="card"><h2>Agenten (je Server einer)</h2>
-  <div class="scroll"><table style="min-width:0"><thead><tr><th>Agent</th><th>Sites</th><th>Konfiguration zuletzt abgeholt</th></tr></thead><tbody>
-  {{range .Agents}}<tr><td><a href="/agents/{{.ID}}" class="mono">{{.ID}}</a></td><td class="mono" data-label="Sites">{{.Sites}}</td><td data-label="Konfiguration abgeholt">{{.Fetched}}</td></tr>
-  {{else}}<tr><td colspan="3" class="muted">Noch kein Agent angelegt.</td></tr>{{end}}
+  <div class="scroll"><table style="min-width:0"><thead><tr><th>Agent</th><th>Typ</th><th>Sites</th><th>Konfiguration zuletzt abgeholt</th></tr></thead><tbody>
+  {{range .Agents}}<tr><td><a href="/agents/{{.ID}}" class="mono">{{.ID}}</a></td><td data-label="Typ">{{.Type}}</td><td class="mono" data-label="Sites">{{.Sites}}</td><td data-label="Konfiguration abgeholt">{{.Fetched}}</td></tr>
+  {{else}}<tr><td colspan="4" class="muted">Noch kein Agent angelegt.</td></tr>{{end}}
   </tbody></table></div>
 </section>
 <section class="card"><h2>Neuen Agenten anlegen</h2><div class="pad">
-  <form method="post" action="/agents" class="inline"><label class="f" style="max-width:360px">ID (a-z, 0-9, -)<input name="id" required pattern="[a-z0-9\-]+"></label>
-  <fieldset style="border:0;padding:0;margin:8px 0"><legend class="muted" style="font-size:13px">Läuft in Docker (Wrapper-Skript aus dem Paket wird eingetragen, sonst direkt auf dem Host):</legend><label style="margin-right:14px"><input type="checkbox" name="docker_composer" value="1" checked> composer</label><label style="margin-right:14px"><input type="checkbox" name="docker_php" value="1" checked> php</label><label style="margin-right:14px"><input type="checkbox" name="docker_nginx" value="1" checked> nginx</label><label style="margin-right:14px"><input type="checkbox" name="docker_mariadb" value="1" checked> mariadb</label></fieldset>
-  <p class="muted" style="font-size:13px">Danach wird das Token einmalig angezeigt, zusammen mit der lokalen Datei für den Agenten.</p>
+  <form method="post" action="/agents" class="inline"><fieldset style="border:0;padding:0;margin:0 0 8px"><legend class="muted" style="font-size:13px">Typ</legend>
+  <label style="margin-right:14px"><input type="radio" name="type" value="" checked> Server-Agent (Go-Programm auf dem Server)</label>
+  <label><input type="radio" name="type" value="contao-bundle"> Contao-Bundle (für Hosting ohne eigene Programme, z. B. Shared Hosting)</label></fieldset>
+  <label class="f" style="max-width:360px">ID (a-z, 0-9, -; beim Contao-Bundle zugleich die Site-ID)<input name="id" required pattern="[a-z0-9\-]+"></label>
+  <fieldset style="border:0;padding:0;margin:8px 0"><legend class="muted" style="font-size:13px">Nur Contao-Bundle:</legend><div class="fgrid"><label class="f">Anzeigename (leer = ID)<input name="name"></label><label class="f">URL der Seite (nur zur Anzeige, optional)<input name="site_url" placeholder="https://www.example.org"></label></div></fieldset>
+  <fieldset style="border:0;padding:0;margin:8px 0"><legend class="muted" style="font-size:13px">Nur Server-Agent. Läuft in Docker (Wrapper-Skript aus dem Paket wird eingetragen, sonst direkt auf dem Host):</legend><label style="margin-right:14px"><input type="checkbox" name="docker_composer" value="1" checked> composer</label><label style="margin-right:14px"><input type="checkbox" name="docker_php" value="1" checked> php</label><label style="margin-right:14px"><input type="checkbox" name="docker_nginx" value="1" checked> nginx</label><label style="margin-right:14px"><input type="checkbox" name="docker_mariadb" value="1" checked> mariadb</label></fieldset>
+  <p class="muted" style="font-size:13px">Danach wird das Token einmalig angezeigt, beim Server-Agent zusammen mit der lokalen Datei für den Agenten, beim Contao-Bundle mit dem Block für die <span class="mono">config.yaml</span>.</p>
   <button class="btn primary" type="submit">Anlegen</button></form>
 </div></section>
 </main>{{template "foot"}}</body></html>

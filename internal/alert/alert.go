@@ -29,9 +29,11 @@ type State interface {
 type Watcher struct {
 	Store  store.Store
 	Config status.Config
-	Send   Sender
-	Now    func() time.Time
-	State  State // optional
+	// Settings (optional) ersetzt Config und gilt immer in der aktuellen Fassung, wenn das Cockpit die Schwellwerte ändert.
+	Settings *status.Settings
+	Send     Sender
+	Now      func() time.Time
+	State    State // optional
 
 	crit map[string]bool // Site-ID -> Alarm wurde versendet
 }
@@ -55,9 +57,13 @@ func (w *Watcher) Check() {
 		return
 	}
 	now := w.Now()
+	cfg := w.Config
+	if w.Settings != nil {
+		cfg = w.Settings.Get()
+	}
 	for _, e := range entries {
 		id := e.Report.Site.ID
-		res := status.Evaluate(&e.Report, e.ReceivedAt, now, w.Config)
+		res := status.Evaluate(&e.Report, e.ReceivedAt, now, cfg)
 		name := e.Report.Site.Name
 		if name == "" {
 			name = id

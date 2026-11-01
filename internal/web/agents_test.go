@@ -10,11 +10,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
-	"sitewatch/internal/agents"
-	"sitewatch/internal/auth"
 	"sitewatch/internal/report"
 	"sitewatch/internal/sign"
+	"sitewatch/internal/status"
 )
 
 func setupAgents(t *testing.T) (*Server, ed25519.PublicKey) {
@@ -24,7 +24,7 @@ func setupAgents(t *testing.T) (*Server, ed25519.PublicKey) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv.SignKey, srv.Agents = priv, agents.Open(filepath.Join(t.TempDir(), "agents.json"))
+	srv.SignKey = priv
 	return srv, priv.Public().(ed25519.PublicKey)
 }
 
@@ -95,7 +95,7 @@ func TestAgentFlow(t *testing.T) {
 	}
 	// Melden: nur für Sites der Konfiguration.
 	rep := func(id string) report.Report {
-		return report.Report{Schema: 1, CollectedAt: srv.Now(), Site: report.Site{ID: id, Kind: "contao"}}
+		return report.Report{Schema: 1, Agent: report.Agent{Type: "go-host"}, CollectedAt: srv.Now(), Site: report.Site{ID: id, Kind: "contao"}}
 	}
 	if w := post(srv, tok, rep("kunde")); w.Code != http.StatusNoContent {
 		t.Errorf("eigene Site: %d", w.Code)
@@ -145,14 +145,6 @@ func TestSaveRejectsBrokenForm(t *testing.T) {
 	if a, _ := srv.Agents.Get("server1"); len(a.Config.Sites) != 1 {
 		t.Error("Konfiguration darf nicht geleert werden")
 	}
-	// Site mit eigenem Token (sitewatch token) darf nicht zusätzlich einem Agenten gehören.
-	if _, err := auth.Add(srv.TokensPath, "alt"); err != nil {
-		t.Fatal(err)
-	}
-	dup := url.Values{"count": {"1"}, "s0_id": {"alt"}, "s0_kind": {"php"}, "s0_path": {"/var/www/alt"}}
-	if w := do(srv, "POST", "/agents/server1", dup, nil); w.Code != 422 {
-		t.Errorf("Kollision mit Einzel-Token: %d", w.Code)
-	}
 	if w := do(srv, "POST", "/agents/server1", url.Values{"count": {"1"}, "s0_id": {"b"}, "s0_kind": {"php"}, "s0_path": {"/x"}, "s0_url": {"ftp://x"}}, nil); w.Code != 422 {
 		t.Errorf("url-Schema: %d", w.Code)
 	}
@@ -184,5 +176,124 @@ func TestDockerTools(t *testing.T) {
 	got := dockerTools(r)
 	if len(got) != 2 || got[0]["Name"] != "php" || got[1]["Path"] != "/usr/share/sitewatch-agent/docker/nginx-in-docker" {
 		t.Fatalf("dockerTools = %v", got)
+	}
+}
+
+func TestBundleFlow(t *testing.T) {
+	srv, _ := setupAgents(t)
+	snippetToken := func(body string) string {
+		for _, l := range strings.Split(html.UnescapeString(body), "\n") {
+			if l = strings.TrimSpace(l); strings.HasPrefix(l, "token: '") {
+				return strings.TrimSuffix(strings.TrimPrefix(l, "token: '"), "'")
+			}
+		}
+		return ""
+	}
+	w := do(srv, "POST", "/agents", url.Values{"type": {"contao-bundle"}, "id": {"kunde-x"}, "name": {"Kunde 'X'"}, "site_url": {"https://x.example"}}, nil)
+	body := html.UnescapeString(w.Body.String())
+	tok := snippetToken(w.Body.String())
+	for _, want := range []string{"cgoit_sitewatch:", "    url: 'https://example.com'", "    site_id: 'kunde-x'", "    site_name: 'Kunde ''X'''", "    site_url: 'https://x.example'"} {
+		if w.Code != 200 || !strings.Contains(body, want) {
+			t.Fatalf("Snippet ohne %q (%d): %s", want, w.Code, body)
+		}
+	}
+	if len(tok) != 64 || strings.Contains(body, "bootstrap.json") {
+		t.Fatalf("Token %q oder Server-Block statt Snippet", tok)
+	}
+	rep := report.Report{Schema: 1, Agent: report.Agent{Type: report.AgentContaoBundle}, CollectedAt: srv.Now(), Site: report.Site{ID: "kunde-x", Kind: "contao"}}
+	if w := post(srv, tok, rep); w.Code != http.StatusNoContent {
+		t.Errorf("Report mit Bundle-Token: %d", w.Code)
+	}
+	rep.Site.ID = "fremd"
+	if w := post(srv, tok, rep); w.Code != http.StatusUnauthorized {
+		t.Errorf("fremde Site: %d", w.Code)
+	}
+	rep.Site.ID, rep.Agent.Type = "kunde-x", "go-host"
+	if w := post(srv, tok, rep); w.Code != http.StatusUnauthorized {
+		t.Errorf("Bundle-Token mit Typ go-host: %d", w.Code)
+	}
+	rep.Agent.Type = report.AgentContaoBundle
+	if w := do(srv, "POST", "/agents/gibt-es-nicht/rotate", url.Values{}, nil); w.Code != http.StatusNotFound {
+		t.Errorf("unbekannter Agent: %d", w.Code)
+	}
+	if b := do(srv, "GET", "/agents", nil, nil).Body.String(); !strings.Contains(b, "Contao-Bundle") {
+		t.Error("Typ fehlt in der Liste")
+	}
+	if b := do(srv, "GET", "/agents/kunde-x", nil, nil).Body.String(); !strings.Contains(b, "TOKEN-DES-AGENTEN") || strings.Contains(b, tok) {
+		t.Error("Seite zeigt Platzhalter statt Token erwartet")
+	}
+	if w := do(srv, "POST", "/agents/kunde-x", url.Values{"name": {"Neu"}, "site_url": {"ftp://x"}}, nil); w.Code != 422 {
+		t.Errorf("ungültige URL: %d", w.Code)
+	}
+	if w := do(srv, "POST", "/agents/kunde-x", url.Values{"name": {"Neu"}}, nil); w.Code != http.StatusSeeOther {
+		t.Errorf("Speichern: %d", w.Code)
+	}
+	w = do(srv, "POST", "/agents/kunde-x/rotate", url.Values{}, nil)
+	if neu := snippetToken(w.Body.String()); len(neu) != 64 || neu == tok {
+		t.Errorf("neues Token fehlt")
+	}
+	rep.Site.ID = "kunde-x"
+	if w := post(srv, tok, rep); w.Code != http.StatusUnauthorized {
+		t.Errorf("altes Token: %d", w.Code)
+	}
+}
+
+func TestSettingsPage(t *testing.T) {
+	srv, _ := setupAgents(t)
+	var savedVals map[string]int
+	srv.SaveSettings = func(c status.Config, vals map[string]int) error {
+		savedVals = vals
+		srv.Settings.Set(c)
+		return nil
+	}
+	if b := do(srv, "GET", "/settings", nil, nil).Body.String(); !strings.Contains(b, `name="tls_warn_days"`) || !strings.Contains(b, "Standard: 14") || !strings.Contains(b, "Einstellungen</a>") {
+		t.Fatal("Formular fehlt")
+	}
+	// Speichern: nur Abweichungen vom Standard werden weitergereicht, der Wert gilt sofort.
+	form := url.Values{"tls_warn_days": {"30"}, "error_warn": {"10"}}
+	if w := do(srv, "POST", "/settings", form, nil); w.Code != http.StatusSeeOther {
+		t.Fatalf("Speichern: %d %s", w.Code, w.Body.String())
+	}
+	if len(savedVals) != 1 || savedVals["tls_warn_days"] != 30 || srv.cfg().TLSWarn != 30*24*time.Hour {
+		t.Errorf("gespeichert: %v / %v", savedVals, srv.cfg().TLSWarn)
+	}
+	if b := do(srv, "GET", "/settings?saved=1", nil, nil).Body.String(); !strings.Contains(b, `value="30"`) || !strings.Contains(b, "Gespeichert") {
+		t.Error("neuer Wert oder Hinweis fehlt")
+	}
+	// Ungültige Eingaben ändern nichts und zeigen die Eingabe wieder an.
+	for name, bad := range map[string]url.Values{
+		"keine Zahl": {"tls_warn_days": {"abc"}},
+		"null":       {"tls_warn_days": {"0"}},
+		"crit>warn":  {"disk_crit_pct": {"50"}},
+	} {
+		w := do(srv, "POST", "/settings", bad, nil)
+		if w.Code != 422 || srv.cfg().TLSWarn != 30*24*time.Hour || srv.cfg().DiskCrit != 5 {
+			t.Errorf("%s: %d", name, w.Code)
+		}
+	}
+	// Zurücksetzen: Standardwerte, nil an den Speicher.
+	if w := do(srv, "POST", "/settings/reset", url.Values{}, nil); w.Code != http.StatusSeeOther || savedVals != nil || srv.cfg().TLSWarn != 14*24*time.Hour {
+		t.Errorf("zurücksetzen: %d %v %v", w.Code, savedVals, srv.cfg().TLSWarn)
+	}
+}
+
+// Eine Site ohne Meldung hat keine Detailseite und deshalb keinen Link; mit Meldung gibt es ihn.
+func TestUnreportedSiteHasNoLink(t *testing.T) {
+	srv, tok, now := setup(t)
+	if _, err := srv.Agents.CreateBundle("neu-b", "", "", now); err != nil {
+		t.Fatal(err)
+	}
+	b := do(srv, "GET", "/", nil, nil).Body.String()
+	if strings.Contains(b, `href="/sites/neu-b"`) || !strings.Contains(b, "neu-b") {
+		t.Error("Site ohne Meldung: Link oder Name falsch")
+	}
+	if w := do(srv, "GET", "/sites/neu-b", nil, nil); w.Code != 404 {
+		t.Errorf("Detail ohne Meldung: %d", w.Code)
+	}
+	if w := post(srv, tok, report.Report{Schema: 1, CollectedAt: now, Site: report.Site{ID: "kunde-c", Kind: "contao"}}); w.Code != http.StatusNoContent {
+		t.Fatal(w.Code)
+	}
+	if b := do(srv, "GET", "/", nil, nil).Body.String(); !strings.Contains(b, `href="/sites/kunde-c"`) {
+		t.Error("Site mit Meldung hat keinen Link")
 	}
 }

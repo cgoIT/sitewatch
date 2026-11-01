@@ -22,7 +22,10 @@ type Report struct {
 	CollectedAt time.Time  `json:"collected_at"`
 }
 
-// Agent beschreibt, wer den Report erzeugt hat (Go-Host-Agent oder PHP-Bundle).
+// AgentContaoBundle ist der Agent-Typ des Contao-Bundles (cgoit/contao-sitewatch-bundle) für Hosting ohne eigene Programme.
+const AgentContaoBundle = "contao-bundle"
+
+// Agent beschreibt, wer den Report erzeugt hat (Go-Host-Agent "go-host" oder Contao-Bundle).
 type Agent struct {
 	Type    string `json:"type"`
 	Version string `json:"version"`

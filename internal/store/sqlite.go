@@ -68,6 +68,36 @@ func OpenSQLite(path string, ret Retention) (*SQLite, error) {
 
 func (s *SQLite) Close() error { return s.db.Close() }
 
+// Setting liest eine Einstellung des Cockpits (Tabelle meta, Schlüssel mit Präfix); ok=false: nicht gesetzt.
+func (s *SQLite) Setting(key string) (value string, ok bool, err error) {
+	err = s.db.QueryRow(`SELECT value FROM meta WHERE key=?`, "setting."+key).Scan(&value)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	return value, err == nil, err
+}
+
+// SetSetting speichert eine Einstellung; DeleteSetting setzt sie zurück.
+func (s *SQLite) SetSetting(key, value string) error {
+	_, err := s.db.Exec(`INSERT INTO meta(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`, "setting."+key, value)
+	return err
+}
+
+func (s *SQLite) DeleteSetting(key string) error {
+	_, err := s.db.Exec(`DELETE FROM meta WHERE key=?`, "setting."+key)
+	return err
+}
+
+// SetRetention ändert die Aufbewahrung; sie gilt ab der nächsten Bereinigung (Maintain).
+func (s *SQLite) SetRetention(r Retention) {
+	s.mu.Lock()
+	s.ret = r
+	s.mu.Unlock()
+}
+
+// DB liefert die Datenbank für Tabellen anderer Pakete (Agenten); sie nutzen dieselbe einzige Verbindung.
+func (s *SQLite) DB() *sql.DB { return s.db }
+
 func (s *SQLite) Save(e Entry, level int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

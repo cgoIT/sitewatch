@@ -22,14 +22,14 @@
     <tbody>
     {{range .Rows}}
     <tr>
-      <td>{{template "kindicon" .Kind}}<a href="/sites/{{.ID}}" style="font-weight:500;text-decoration:none">{{.Name}}</a><div class="sub">{{.URL}}</div>
+      <td>{{template "kindicon" .Kind}}{{if .Reported}}<a href="/sites/{{.ID}}" style="font-weight:500;text-decoration:none">{{.Name}}</a>{{else}}<span style="font-weight:500">{{.Name}}</span>{{end}}<div class="sub">{{.URL}}</div>
         {{if .Reasons}}<ul class="reasons">{{range .Reasons}}<li>{{.}}</li>{{end}}</ul>{{end}}</td>
       <td class="mono" data-label="Contao">{{.Contao}}</td><td class="mono" data-label="PHP">{{.PHP}}</td><td class="mono" data-label="Updates">{{.Updates}}{{with .UpdatesTrend}} <span class="tr {{.Class}}" title="{{.Title}}">{{.Text}}</span>{{end}}</td><td class="mono" data-label="Fehler 24 h">{{.Errors}}</td>
       <td data-label="Letzte Meldung">{{.Seen}}</td>
       <td data-label="Status"><span class="badge {{.Level}}">{{.Icon}} {{.Label}}</span>{{if .Maintenance}}<span class="badge maint">Wartung</span>{{end}}</td>
     </tr>
     {{else}}
-    <tr><td colspan="7" class="muted">{{if .Filter.Active}}Keine Site passt zum Filter.{{else}}Noch keine Sites registriert. Token anlegen mit: sitewatch token &lt;site-id&gt;{{end}}</td></tr>
+    <tr><td colspan="7" class="muted">{{if .Filter.Active}}Keine Site passt zum Filter.{{else}}Noch keine Sites registriert. Unter „Agenten“ einen Agenten anlegen.{{end}}</td></tr>
     {{end}}
     </tbody>
   </table></div>
@@ -43,7 +43,7 @@
   <div class="scroll"><table class="matrix">
     <thead><tr><th>Site</th>{{range .Heads}}<th>{{.}}</th>{{end}}</tr></thead>
     <tbody>{{range .Rows}}
-    <tr><td><a href="/sites/{{.ID}}" style="font-weight:500;text-decoration:none">{{.Name}}</a></td>{{range $i, $c := .Cells}}{{with $c}}<td class="mono cell {{.Level}}" data-label="{{index $.Heads $i}}">{{.Text}}{{with .Trend}} <span class="tr {{.Class}}" title="{{.Title}}">{{.Text}}</span>{{end}}</td>{{end}}{{end}}</tr>
+    <tr><td>{{if .Reported}}<a href="/sites/{{.ID}}" style="font-weight:500;text-decoration:none">{{.Name}}</a>{{else}}<span style="font-weight:500">{{.Name}}</span>{{end}}</td>{{range $i, $c := .Cells}}{{with $c}}<td class="mono cell {{.Level}}" data-label="{{index $.Heads $i}}">{{.Text}}{{with .Trend}} <span class="tr {{.Class}}" title="{{.Title}}">{{.Text}}</span>{{end}}</td>{{end}}{{end}}</tr>
     {{end}}</tbody>
   </table></div>
 </section>

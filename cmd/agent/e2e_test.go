@@ -30,8 +30,11 @@ func TestJobEndToEnd(t *testing.T) {
 	}
 	defer st.Close()
 	priv, _ := sign.LoadOrCreateKey(filepath.Join(dir, "signing.key"))
-	srv := web.New(st, filepath.Join(dir, "tokens.json"), status.DefaultConfig())
-	srv.SignKey, srv.Agents, srv.Jobs = priv, agents.Open(filepath.Join(dir, "agents.json")), st
+	srv := web.New(st, status.DefaultConfig())
+	srv.SignKey, srv.Jobs = priv, st
+	if srv.Agents, err = agents.Open(st.DB()); err != nil {
+		t.Fatal(err)
+	}
 	srv.Protect = func(h http.Handler) http.Handler { return h }
 	srv.Who = func(*http.Request) string { return "nutzer@example.org" }
 	ts := httptest.NewServer(srv.Handler())

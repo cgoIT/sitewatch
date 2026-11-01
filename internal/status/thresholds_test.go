@@ -1,8 +1,6 @@
 package status
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -56,35 +54,57 @@ func TestMaintenanceEvaluate(t *testing.T) {
 	}
 }
 
-func TestLoadThresholds(t *testing.T) {
-	write := func(s string) string {
-		p := filepath.Join(t.TempDir(), "t.json")
-		if err := os.WriteFile(p, []byte(s), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		return p
-	}
+func TestWith(t *testing.T) {
 	def := DefaultConfig()
-	if c, err := LoadThresholds("", def); err != nil || c != def {
-		t.Fatalf("leerer Pfad: %+v %v", c, err)
+	if c, err := def.With(nil); err != nil || c != def {
+		t.Fatalf("ohne Werte: %+v %v", c, err)
 	}
-	c, err := LoadThresholds(write(`{"tls_warn_days":30,"disk_warn_pct":20}`), def)
+	c, err := def.With(map[string]int{"tls_warn_days": 30, "disk_warn_pct": 20})
 	if err != nil || c.TLSWarn != 30*24*time.Hour || c.DiskWarn != 20 || c.DiskCrit != def.DiskCrit || c.BackupMax != def.BackupMax {
 		t.Fatalf("%+v %v", c, err)
 	}
-	for name, content := range map[string]string{
-		"unbekannt": `{"tls_warn":30}`,
-		"null":      `{"tls_warn_days":0}`,
-		"crit>warn": `{"disk_crit_pct":30}`,
-		"cron":      `{"cron_warn_minutes":300}`,
-		"wartung":   `{"maintenance_warn_minutes":600}`,
-		"history":   `{"history_full_days":100}`,
-		">100":      `{"disk_warn_pct":101}`,
-		"kein JSON": `tls`,
+	for name, vals := range map[string]map[string]int{
+		"unbekannt": {"tls_warn": 30},
+		"null":      {"tls_warn_days": 0},
+		"crit>warn": {"disk_crit_pct": 30},
+		"cron":      {"cron_warn_minutes": 300},
+		"wartung":   {"maintenance_warn_minutes": 600},
+		"history":   {"history_full_days": 100},
+		">100":      {"disk_warn_pct": 101},
 	} {
-		if _, err := LoadThresholds(write(content), def); err == nil {
-			t.Errorf("%s: kein Fehler", name)
+		if got, err := def.With(vals); err == nil || got != def {
+			t.Errorf("%s: kein Fehler oder Config verändert", name)
 		}
+	}
+}
+
+// Jeder Schlüssel aus Fields lässt sich schreiben und liest denselben Wert zurück; Standardwerte sind gültig.
+func TestFieldsRoundTrip(t *testing.T) {
+	def := DefaultConfig()
+	if _, err := def.With(def.Values()); err != nil {
+		t.Fatalf("Standardwerte ungültig: %v", err)
+	}
+	seen := map[string]bool{}
+	for _, f := range Fields {
+		if seen[f.Key] || f.Group == "" || f.Label == "" || f.Unit == "" {
+			t.Errorf("Feld unvollständig oder doppelt: %+v", f.Key)
+		}
+		seen[f.Key] = true
+		c := def
+		f.Set(&c, 7)
+		if got := f.Get(c); got != 7 {
+			t.Errorf("%s: %d", f.Key, got)
+		}
+	}
+}
+
+func TestSettingsHolder(t *testing.T) {
+	s := NewSettings(DefaultConfig())
+	c := s.Get()
+	c.ErrorWarn = 99
+	s.Set(c)
+	if s.Get().ErrorWarn != 99 {
+		t.Error("Set wirkt nicht")
 	}
 }
 
@@ -113,5 +133,22 @@ func TestEOLLevel(t *testing.T) {
 	}
 	if l, _ := EOLLevel("php", "8.1.9", now, cfg); l != OK { // die Quelle hat Vorrang vor der Tabelle
 		t.Errorf("Quelle vor Tabelle: %v", l)
+	}
+}
+
+func TestWithJSON(t *testing.T) {
+	def := DefaultConfig()
+	if c, err := def.WithJSON(`{"tls_warn_days": 30}`); err != nil || c.TLSWarn != 30*24*time.Hour {
+		t.Fatalf("gültig: %+v %v", c, err)
+	}
+	for name, raw := range map[string]string{
+		"kein json": `{`,
+		"ungültig":  `{"disk_crit_pct": 30}`,
+		"zu groß":   `{"tls_warn_days": 99999999999}`,
+		"unbekannt": `{"x": 1}`,
+	} {
+		if got, err := def.WithJSON(raw); err == nil || got != def {
+			t.Errorf("%s: kein Fehler oder Config verändert", name)
+		}
 	}
 }

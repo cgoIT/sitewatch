@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sitewatch – Einstellungen</title>{{template "css"}}</head>
+<body>{{template "top" "settings"}}
+<main>
+<h1 style="margin:0;font-size:26px;font-weight:600">Einstellungen</h1>
+{{if .Saved}}<div class="banner">Gespeichert. Die Werte gelten sofort für Anzeige und Alarme, die Aufbewahrung ab der nächsten täglichen Bereinigung.</div>{{end}}
+{{if .Error}}<div class="banner">{{.Error}}</div>{{end}}
+<form method="post" action="/settings">
+{{range .Groups}}<section class="card"><h2>{{.Name}}</h2><div class="pad"><div class="fgrid">
+  {{range .Fields}}<label class="f">{{.Label}} ({{.Unit}})<input name="{{.Key}}" type="number" min="1" step="1" required value="{{.Value}}"><span class="muted" style="font-size:12px">Standard: {{.Default}}</span></label>
+  {{end}}
+</div></div></section>
+{{end}}
+<p><button class="btn primary" type="submit">Speichern</button></p>
+</form>
+<section class="card"><h2>Standardwerte</h2><div class="pad">
+  <form method="post" action="/settings/reset" class="inline"><button class="btn" type="submit">Alle Werte auf den Standard zurücksetzen</button></form>
+</div></section>
+</main>{{template "foot"}}</body></html>

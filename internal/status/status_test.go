@@ -53,3 +53,20 @@ func TestEvaluate(t *testing.T) {
 }
 
 func ptr(t time.Time) *time.Time { return &t }
+
+// Das Contao-Bundle meldet nur stündlich: 2 Stunden ohne Meldung sind für ein Bundle noch in Ordnung, für einen Server-Agenten nicht.
+func TestBundleProfile(t *testing.T) {
+	cfg := DefaultConfig()
+	r := base()
+	r.Agent.Type = report.AgentContaoBundle
+	if got := Evaluate(r, now.Add(-2*time.Hour), now, cfg).Level; got != OK {
+		t.Errorf("Bundle nach 2 h: %v", got)
+	}
+	if got := Evaluate(r, now.Add(-4*time.Hour), now, cfg).Level; got != Crit {
+		t.Errorf("Bundle nach 4 h: %v", got)
+	}
+	r.Agent.Type = "go-host"
+	if got := Evaluate(r, now.Add(-2*time.Hour), now, cfg).Level; got != Crit {
+		t.Errorf("Server-Agent nach 2 h: %v", got)
+	}
+}

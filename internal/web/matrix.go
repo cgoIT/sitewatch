@@ -17,6 +17,7 @@ type cell struct {
 
 type matrixRow struct {
 	ID, Name string
+	Reported bool // nur mit Report gibt es eine Detailseite
 	Cells    []cell
 }
 
@@ -36,7 +37,7 @@ func (s *Server) matrices(base map[string]store.Sample) (versions, params matrix
 	if err != nil {
 		return
 	}
-	versions, params = buildMatrices(entries, ids, s.Now(), s.Status, base)
+	versions, params = buildMatrices(entries, ids, s.Now(), s.cfg(), base)
 	return
 }
 
@@ -73,17 +74,17 @@ func buildMatrices(entries []store.Entry, ids []string, now time.Time, cfg statu
 				mig.Level = status.Crit.String()
 			}
 		}
-		versions.Rows = append(versions.Rows, matrixRow{r.Site.ID, name,
+		versions.Rows = append(versions.Rows, matrixRow{r.Site.ID, name, true,
 			[]cell{eolCell("contao", r.Site.Contao, now, cfg), eolCell("php", r.Site.PHP, now, cfg),
 				eolCell("mariadb", r.Host.MariaDB, now, cfg), eolCell("nginx", r.Host.Nginx, now, cfg)}})
-		params.Rows = append(params.Rows, matrixRow{r.Site.ID, name, []cell{disk, backup, tls, cron, mig}})
+		params.Rows = append(params.Rows, matrixRow{r.Site.ID, name, true, []cell{disk, backup, tls, cron, mig}})
 	}
 	for _, id := range ids {
 		if seen[id] {
 			continue
 		}
-		versions.Rows = append(versions.Rows, matrixRow{id, id, make([]cell, len(versions.Heads))})
-		params.Rows = append(params.Rows, matrixRow{id, id, make([]cell, len(params.Heads))})
+		versions.Rows = append(versions.Rows, matrixRow{id, id, false, make([]cell, len(versions.Heads))})
+		params.Rows = append(params.Rows, matrixRow{id, id, false, make([]cell, len(params.Heads))})
 	}
 	for _, m := range []*matrix{&versions, &params} {
 		sort.SliceStable(m.Rows, func(i, j int) bool { return m.Rows[i].Name < m.Rows[j].Name })

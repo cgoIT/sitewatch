@@ -1,17 +1,34 @@
 package agents
 
 import (
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"sitewatch/internal/agentcfg"
+	"sitewatch/internal/store"
 )
+
+func open(t *testing.T) *Store {
+	t.Helper()
+	st, err := store.OpenSQLite(filepath.Join(t.TempDir(), "sitewatch.db"), store.DefaultRetention())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+	s, err := Open(st.DB())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s
+}
 
 func site(id string) agentcfg.Site { return agentcfg.Site{ID: id, Kind: "php", Path: "/var/www/" + id} }
 
 func TestLifecycle(t *testing.T) {
-	s := Open(filepath.Join(t.TempDir(), "agents.json"))
+	s := open(t)
 	now := time.Now()
 	tok, err := s.Create("server1", now)
 	if err != nil || tok == "" {
@@ -66,5 +83,81 @@ func TestLifecycle(t *testing.T) {
 	}
 	if _, err := s.Get("server1"); err != ErrNotFound {
 		t.Errorf("gelöscht: %v", err)
+	}
+}
+
+func TestBundle(t *testing.T) {
+	s := open(t)
+	now := time.Now()
+	tok, err := s.CreateBundle("kunde-x", "Kunde X", "https://x.example", now)
+	if err != nil || tok == "" {
+		t.Fatal(err)
+	}
+	a, ok, err := s.ByToken(tok)
+	if err != nil || !ok || !a.Bundle() || len(a.Config.Sites) != 1 || a.Config.Sites[0].ID != "kunde-x" || a.Config.Sites[0].Kind != "contao" {
+		t.Fatalf("Bundle: %+v %v %v", a, ok, err)
+	}
+	if _, err := s.CreateBundle("kunde-x", "", "", now); err == nil {
+		t.Error("doppelte ID")
+	}
+	if _, err := s.CreateBundle("a", "zwei\nZeilen", "", now); err == nil {
+		t.Error("Steuerzeichen im Namen")
+	}
+	if _, err := s.CreateBundle("b", "", "ftp://x", now); err == nil {
+		t.Error("ungültige URL")
+	}
+	// Eine Site gehört nur zu einem Agenten, auch nicht zu einem Bundle und einem Server-Agenten.
+	if _, err := s.Create("server1", now); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Save("server1", agentcfg.Remote{Sites: []agentcfg.Site{site("kunde-x")}}, now); err == nil {
+		t.Error("Site des Bundles dem Server-Agenten zugewiesen")
+	}
+	if err := s.Save("kunde-x", agentcfg.Remote{}, now); err == nil {
+		t.Error("Konfiguration eines Bundles überschrieben")
+	}
+	if err := s.UpdateBundle("kunde-x", "Neu", "", now); err != nil {
+		t.Fatal(err)
+	}
+	if a, _ := s.Get("kunde-x"); a.Config.Sites[0].Name != "Neu" || a.Config.Sites[0].URL != "" {
+		t.Errorf("nicht geändert: %+v", a.Config.Sites[0])
+	}
+	if err := s.UpdateBundle("server1", "x", "", now); err == nil {
+		t.Error("Server-Agent als Bundle geändert")
+	}
+}
+
+// Der Import aus agents.json passiert genau einmal; die Datei bleibt unverändert, ein später gelöschter Agent kommt nicht zurück.
+func TestImportFile(t *testing.T) {
+	s := open(t)
+	path := filepath.Join(t.TempDir(), "agents.json")
+	old := `[{"id":"server1","token_hash":"` + strings.Repeat("a", 64) + `","config":{"interval":"10m","sites":[{"id":"kunde","kind":"contao","path":"/var/www/kunde"}]},"updated":"2026-10-01T10:00:00Z"}]`
+	if err := os.WriteFile(path, []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := s.ImportFile(path); err != nil || n != 1 {
+		t.Fatalf("Import: %d %v", n, err)
+	}
+	a, err := s.Get("server1")
+	if err != nil || a.Config.Interval != "10m" || len(a.Config.Sites) != 1 || a.Config.Sites[0].Path != "/var/www/kunde" || a.TokenHash == "" {
+		t.Fatalf("importiert: %+v %v", a, err)
+	}
+	if b, _ := os.ReadFile(path); string(b) != old {
+		t.Error("Datei wurde verändert")
+	}
+	if err := s.Delete("server1"); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := s.ImportFile(path); err != nil || n != 0 {
+		t.Errorf("zweiter Import: %d %v", n, err)
+	}
+	if _, err := s.Get("server1"); err == nil {
+		t.Error("gelöschter Agent kam zurück")
+	}
+}
+
+func TestImportMissingFileIsNoError(t *testing.T) {
+	if n, err := open(t).ImportFile(filepath.Join(t.TempDir(), "gibt-es-nicht.json")); err != nil || n != 0 {
+		t.Errorf("%d %v", n, err)
 	}
 }

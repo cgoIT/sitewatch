@@ -1,10 +1,9 @@
 // Sitewatch nimmt Reports der Agenten entgegen und zeigt den Zustand aller Sites.
 //
-//	sitewatch serve [-addr :8080] [-data ./data] [-tokens ./tokens.json] [-allow-group g] [-allow-sub s] [-allow-email e] [-trusted-proxy ip,cidr] [-no-login] [-alert-to a,b -alert-from x -alert-smtp host:port]
+//	sitewatch serve [-addr :8080] [-data ./data] [-allow-group g] [-allow-sub s] [-allow-email e] [-trusted-proxy ip,cidr] [-no-login] [-alert-to a,b -alert-from x -alert-smtp host:port]
 //	sitewatch alert-test -alert-to a,b -alert-from x -alert-smtp host:port
 //	sitewatch pubkey [-data ./data]
 //	sitewatch version
-//	sitewatch token [-tokens ./tokens.json] [-kind contao|php|host] [-name n] [-url u] [-path p] [-rotate | -remove] <site-id>
 package main
 
 import (
@@ -24,7 +23,6 @@ import (
 
 	"sitewatch/internal/agents"
 	"sitewatch/internal/alert"
-	"sitewatch/internal/auth"
 	"sitewatch/internal/eol"
 	"sitewatch/internal/login"
 	"sitewatch/internal/ratelimit"
@@ -51,34 +49,35 @@ func main() {
 		fmt.Println("sitewatch", version)
 	case "serve":
 		serve(args)
-	case "token":
-		token(args)
 	case "pubkey":
 		pubkey(args)
 	case "alert-test":
 		alertTest(args)
 	default:
-		fmt.Fprintln(os.Stderr, "Verwendung: sitewatch serve | sitewatch token <site-id> | sitewatch pubkey | sitewatch alert-test | sitewatch version")
+		fmt.Fprintln(os.Stderr, "Verwendung: sitewatch serve | sitewatch pubkey | sitewatch alert-test | sitewatch version")
 		os.Exit(2)
 	}
 }
+
+// thresholdsKey: unter diesem Schlüssel stehen die vom Standard abweichenden Schwellwerte (JSON) in der Datenbank.
+const thresholdsKey = "thresholds"
 
 func serve(args []string) {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
 	addr := fs.String("addr", "127.0.0.1:8080", "Adresse, auf der gelauscht wird (hinter nginx mit TLS betreiben)")
 	data := fs.String("data", "./data", "Verzeichnis für gespeicherte Reports")
-	tokens := fs.String("tokens", "./tokens.json", "Datei mit Token-Hashes der Agenten")
-	stale := fs.Duration("stale", 15*time.Minute, "keine Meldung seit dieser Zeit = kritisch")
+	_ = fs.String("tokens", "", "veraltet und ohne Wirkung (Sites mit Token legt man im Dashboard als Agent an)")
+	stale := fs.Duration("stale", 0, "veraltet und ohne Wirkung (Schwellwerte pflegt man im Cockpit unter „Einstellungen“)")
 	noLogin := fs.Bool("no-login", false, "Oberfläche OHNE Login betreiben (nur lokale Entwicklung)")
 	group := fs.String("allow-group", "", "Authentik-Gruppen mit Zugriff (kommagetrennt)")
 	sub := fs.String("allow-sub", "", "Benutzer-IDs (OIDC sub) mit Zugriff (kommagetrennt)")
 	email := fs.String("allow-email", "", "verifizierte E-Mail-Adressen mit Zugriff (kommagetrennt)")
 	proxies := fs.String("trusted-proxy", "", "IPs/CIDRs des Reverse-Proxys, dessen X-Forwarded-For für das Rate-Limit gilt (kommagetrennt)")
-	thresholds := fs.String("thresholds", "", "JSON-Datei mit Schwellwerten (siehe README); leer = Standardwerte")
+	thresholds := fs.String("thresholds", "", "veraltet und ohne Wirkung (Schwellwerte pflegt man im Cockpit unter „Einstellungen“)")
 	useEOL := fs.Bool("eol", true, "Support-Enden täglich von endoflife.date abrufen (PHP, Contao, MariaDB, nginx); aus = nur die eingebaute PHP-Tabelle")
 	publicURL := fs.String("public-url", "", "Adresse von Sitewatch für den Block der Agenten-Datei (z. B. https://sitewatch.example); leer = https://<Host der Anfrage>")
 	signKey := fs.String("signing-key", "", "privater Ed25519-Schlüssel für die Konfiguration der Agenten (Standard: <data>/signing.key, wird angelegt)")
-	agentsFile := fs.String("agents", "", "Datei mit Agenten und deren Konfiguration (Standard: <data>/agents.json)")
+	agentsFile := fs.String("agents", "", "Datei des früheren Speichers, aus der die Agenten einmalig in die Datenbank übernommen werden (Standard: <data>/agents.json)")
 	alertTo := fs.String("alert-to", "", "Empfänger der Alarm-E-Mails (kommagetrennt); leer = keine Alarmierung. SMTP-Zugang: SITEWATCH_SMTP_USER/_PASSWORD in der Umgebung")
 	alertFrom := fs.String("alert-from", "", "Absender der Alarm-E-Mails")
 	alertSMTP := fs.String("alert-smtp", "localhost:25", "SMTP-Server host:port (STARTTLS, wenn angeboten)")
@@ -95,14 +94,22 @@ func serve(args []string) {
 	if err != nil {
 		log.Fatalf("-trusted-proxy: %v", err)
 	}
-	cfg := status.DefaultConfig()
-	cfg.StaleAfter = *stale
-	if cfg, err = status.LoadThresholds(*thresholds, cfg); err != nil {
-		log.Fatalf("-thresholds: %v", err)
+	if *thresholds != "" || *stale != 0 {
+		log.Print("Hinweis: -thresholds und -stale werden ignoriert. Schwellwerte pflegt man im Cockpit unter „Einstellungen“.")
 	}
+	cfg := status.DefaultConfig()
 	st, err := store.OpenSQLite(filepath.Join(*data, "sitewatch.db"), cfg.Retention)
 	if err != nil {
 		log.Fatal(err)
+	}
+	if raw, ok, err := st.Setting(thresholdsKey); err != nil {
+		log.Fatalf("Schwellwerte lesen: %v", err)
+	} else if ok {
+		var err error
+		if cfg, err = cfg.WithJSON(raw); err != nil {
+			log.Printf("Gespeicherte Schwellwerte sind ungültig, es gelten die Standardwerte: %v", err)
+		}
+		st.SetRetention(cfg.Retention)
 	}
 	// Einmaliger Import der Dateien des früheren Speichers; sie bleiben als Sicherung liegen.
 	if n, err := st.ImportFiles(*data, func(e store.Entry) int {
@@ -121,28 +128,56 @@ func serve(args []string) {
 		}
 	}()
 	if *useEOL {
-		ep := &eol.Provider{CacheFile: eol.CachePath(*data)}
+		ep := &eol.Provider{Cache: st}
 		cfg.EOL = ep
 		go ep.Run(context.Background(), 24*time.Hour)
 	}
+	settings := status.NewSettings(cfg)
 	var testMail func() error
 	if to := split(*alertTo); len(to) > 0 {
 		if *alertFrom == "" || !strings.Contains(*alertSMTP, ":") {
 			log.Fatal("-alert-to braucht -alert-from und -alert-smtp als host:port")
 		}
 		send := alert.SMTP(*alertSMTP, os.Getenv("SITEWATCH_SMTP_USER"), os.Getenv("SITEWATCH_SMTP_PASSWORD"), *alertFrom, to)
-		w := &alert.Watcher{Store: st, Config: cfg, Now: time.Now, State: st, Send: send}
+		w := &alert.Watcher{Store: st, Config: cfg, Settings: settings, Now: time.Now, State: st, Send: send}
 		go w.Run(context.Background(), *alertEvery)
 		testMail = func() error { return send(testSubject, testBody) }
 	} else {
 		log.Print("Hinweis: keine Alarmierung (-alert-to nicht gesetzt)")
 	}
-	srv := web.New(st, *tokens, cfg)
+	if _, err := os.Stat(filepath.Join(*data, "tokens.json")); err == nil {
+		log.Printf("Hinweis: %s wird nicht mehr gelesen. Sites mit eigenem Token müssen im Dashboard als Agent angelegt werden.", filepath.Join(*data, "tokens.json"))
+	}
+	srv := web.New(st, cfg)
+	srv.Settings = settings
+	srv.SaveSettings = func(c status.Config, vals map[string]int) error {
+		if len(vals) == 0 {
+			if err := st.DeleteSetting(thresholdsKey); err != nil {
+				return err
+			}
+		} else {
+			b, _ := json.Marshal(vals) // map[string]int kann nicht scheitern
+			if err := st.SetSetting(thresholdsKey, string(b)); err != nil {
+				return err
+			}
+		}
+		st.SetRetention(c.Retention)
+		settings.Set(c)
+		return nil
+	}
 	srv.Version, srv.TestMail = version, testMail
 	if srv.SignKey, err = sign.LoadOrCreateKey(*signKey); err != nil {
 		log.Fatalf("-signing-key: %v", err)
 	}
-	srv.Agents, srv.PublicURL = agents.Open(*agentsFile), *publicURL
+	if srv.Agents, err = agents.Open(st.DB()); err != nil {
+		log.Fatalf("Agenten: %v", err)
+	}
+	if n, err := srv.Agents.ImportFile(*agentsFile); err != nil {
+		log.Fatalf("Import der Agenten aus %s: %v", *agentsFile, err)
+	} else if n > 0 {
+		log.Printf("%d Agenten aus %s importiert", n, *agentsFile)
+	}
+	srv.PublicURL = *publicURL
 	srv.Jobs = st
 	log.Printf("Öffentlicher Schlüssel für die Agenten: %s", sign.EncodePublicKey(srv.SignKey.Public().(ed25519.PublicKey)))
 	handler := srv.Handler()
@@ -174,70 +209,6 @@ func pubkey(args []string) {
 		log.Fatal(err)
 	}
 	fmt.Println(sign.EncodePublicKey(priv.Public().(ed25519.PublicKey)))
-}
-
-func token(args []string) {
-	fs := flag.NewFlagSet("token", flag.ExitOnError)
-	tokens := fs.String("tokens", "./tokens.json", "Datei mit Token-Hashes der Agenten")
-	name := fs.String("name", "", "Anzeigename für den Konfigurationsblock (Standard: site-id)")
-	kind := fs.String("kind", "contao", `Art für den Konfigurationsblock: "contao", "php" oder "host"`)
-	siteURL := fs.String("url", "", "öffentliche URL für den Konfigurationsblock")
-	path := fs.String("path", "", "Projektverzeichnis für den Konfigurationsblock")
-	rotate := fs.Bool("rotate", false, "Token einer bereits registrierten Site ersetzen (das alte Token wird ungültig)")
-	remove := fs.Bool("remove", false, "Token der Site löschen (der Agent mit diesem Token bekommt 401); z. B. vor der Umstellung auf einen Agenten im Dashboard")
-	_ = fs.Parse(args)
-	if fs.NArg() != 1 || (*remove && *rotate) || (*kind != "contao" && *kind != "php" && *kind != "host") {
-		fmt.Fprintln(os.Stderr, "Verwendung: sitewatch token [-tokens datei] [-kind contao|php|host] [-name n] [-url u] [-path p] [-rotate | -remove] <site-id>")
-		os.Exit(2)
-	}
-	id := fs.Arg(0)
-	if *remove {
-		ok, err := auth.Remove(*tokens, id)
-		if err != nil {
-			log.Fatal(err)
-		}
-		if !ok {
-			log.Fatalf("Site %q hat kein Token.", id)
-		}
-		fmt.Fprintf(os.Stderr, "Token für %q gelöscht. Ein Agent, der es noch benutzt, wird mit 401 abgewiesen.\n", id)
-		return
-	}
-	if known, err := auth.Load(*tokens); err != nil {
-		log.Fatal(err)
-	} else if _, ok := known[id]; ok && !*rotate {
-		// Ein erneuter Aufruf würde das Token des laufenden Agenten stillschweigend ungültig machen (401).
-		log.Fatalf("Site %q hat schon ein Token. Mit -rotate ersetzen (das alte wird ungültig, der Agent braucht das neue).", id)
-	}
-	t, err := auth.Add(*tokens, id)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(t) // nur Token auf stdout, damit es sich in Skripten weiterverwenden lässt
-	fmt.Fprintf(os.Stderr, "Token für %q angelegt. Es wird nur einmal angezeigt.\n\nBlock für die Agent-Konfiguration (in \"sites\" einfügen):\n%s\n", id, configBlock(id, *name, *kind, *siteURL, *path, t))
-}
-
-// configBlock liefert den Eintrag für "sites" der Agent-Konfiguration. Fehlt bei einer Site der Pfad, steht ein
-// bewusst ungültiger Platzhalter darin, den der Agent beim Start ablehnt, statt still einen falschen Wert zu verwenden.
-func configBlock(id, name, kind, siteURL, path, token string) string {
-	if name == "" {
-		name = id
-	}
-	if path == "" && kind != "host" {
-		path = "<PFAD EINTRAGEN>"
-	}
-	var buf strings.Builder
-	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false) // sonst wird der Platzhalter <PFAD EINTRAGEN> als \u003c… ausgegeben
-	enc.SetIndent("    ", "  ")
-	_ = enc.Encode(struct { // Encode kann für diese Struktur nicht scheitern
-		ID    string `json:"id"`
-		Name  string `json:"name"`
-		Kind  string `json:"kind"`
-		URL   string `json:"url,omitempty"`
-		Path  string `json:"path,omitempty"`
-		Token string `json:"token"`
-	}{id, name, kind, siteURL, path, token})
-	return "    " + strings.TrimSpace(buf.String())
 }
 
 // withLogin schützt die Oberfläche per OIDC. Geheimnisse kommen aus der Umgebung, nicht aus Flags (sichtbar in der Prozessliste):

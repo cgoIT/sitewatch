@@ -61,15 +61,15 @@ J
 # seite-f: reine PHP-Seite mit altem PHP (Stub)
 mkdir -p "$DEMO/sites/seite-f"
 
-TOK="$DEMO/tokens.json"
-for s in eigene-seite-a kunde-b kunde-c seite-f kunde-h; do
-  "$DEMO/bin/sitewatch" token -tokens "$TOK" "$s" > "$DEMO/token-$s" 2>/dev/null
-done
-
 # -no-login: nur für die Demo, nie produktiv
-"$DEMO/bin/sitewatch" serve -no-login -addr "127.0.0.1:$PORT" -data "$DEMO/data" -tokens "$TOK" > "$DEMO/sitewatch.log" 2>&1 &
+"$DEMO/bin/sitewatch" serve -no-login -addr "127.0.0.1:$PORT" -data "$DEMO/data" > "$DEMO/sitewatch.log" 2>&1 &
 echo $! > "$DEMO/sitewatch.pid"
 for _ in $(seq 1 50); do curl -fs "http://127.0.0.1:$PORT/healthz" >/dev/null 2>&1 && break; sleep 0.1; done
+
+# Ein Token je Demo-Site: als Agent angelegt (Typ Contao-Bundle, eine Site je Agent); das Token steht einmalig auf der Antwortseite.
+for s in eigene-seite-a kunde-b kunde-c seite-f kunde-h; do
+  curl -fs -d "type=contao-bundle&id=$s" "http://127.0.0.1:$PORT/agents" | grep -o "token: &#39;[0-9a-f]\{64\}" | grep -o "[0-9a-f]\{64\}" > "$DEMO/token-$s"
+done
 
 run() { # id name kind url [weitere agent-flags]
   local id=$1 name=$2 kind=$3 url=$4; shift 4

@@ -3,13 +3,17 @@
 package agents
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"sitewatch/internal/agentcfg"
 	"sitewatch/internal/auth"
@@ -17,47 +21,117 @@ import (
 )
 
 type Agent struct {
-	ID        string          `json:"id"`
+	ID string `json:"id"`
+	// Type: leer = Go-Agent auf einem Server; report.AgentContaoBundle = Contao-Bundle mit genau einer Site (Site-ID = Agent-ID), das ohne Abruf von Konfiguration meldet.
+	Type      string          `json:"type,omitempty"`
 	TokenHash string          `json:"token_hash"`
 	Config    agentcfg.Remote `json:"config"`
 	Updated   time.Time       `json:"updated"`
 }
 
-// Store ist eine kleine JSON-Datei (chmod 600). shortcut: die Datei wird bei jedem Zugriff gelesen und vollständig geschrieben;
-// für wenige Agenten genügt das, bei vielen in den SQLite-Store verlagern.
+// Store hält die Agenten in der SQLite-Datenbank von Sitewatch (Tabelle agents).
+// shortcut: jede Änderung schreibt die ganze Tabelle neu (in einer Transaktion); für wenige Agenten genügt das, bei vielen je Zeile ändern.
 type Store struct {
-	path string
-	mu   sync.Mutex
+	db *sql.DB
+	mu sync.Mutex
 }
 
-func Open(path string) *Store { return &Store{path: path} }
+// Open legt die Tabelle bei Bedarf an. db kommt von store.SQLite.DB().
+func Open(db *sql.DB) (*Store, error) {
+	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS agents(
+  id TEXT PRIMARY KEY, type TEXT NOT NULL DEFAULT '', token_hash TEXT NOT NULL, config TEXT NOT NULL, updated TEXT NOT NULL)`)
+	return &Store{db: db}, err
+}
 
 var ErrNotFound = errors.New("Agent nicht gefunden")
 
 func (s *Store) load() ([]Agent, error) {
-	b, err := os.ReadFile(s.path)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
-	}
+	rows, err := s.db.Query(`SELECT id, type, token_hash, config, updated FROM agents`)
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 	var as []Agent
-	return as, json.Unmarshal(b, &as)
+	for rows.Next() {
+		var a Agent
+		var cfg, updated string
+		if err := rows.Scan(&a.ID, &a.Type, &a.TokenHash, &cfg, &updated); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(cfg), &a.Config); err != nil {
+			return nil, fmt.Errorf("Agent %q: %w", a.ID, err)
+		}
+		if a.Updated, err = time.Parse(time.RFC3339Nano, updated); err != nil {
+			return nil, fmt.Errorf("Agent %q: %w", a.ID, err)
+		}
+		as = append(as, a)
+	}
+	return as, rows.Err()
 }
 
-// shortcut: ohne fsync; nach einem Absturz kann die Datei leer sein (load meldet dann einen Fehler), bei Bedarf Datei und Verzeichnis syncen.
 func (s *Store) save(as []Agent) error {
-	sort.Slice(as, func(i, j int) bool { return as[i].ID < as[j].ID })
-	b, err := json.MarshalIndent(as, "", "  ")
+	tx, err := s.db.Begin()
 	if err != nil {
 		return err
 	}
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+	defer tx.Rollback()
+	if _, err := tx.Exec(`DELETE FROM agents`); err != nil {
 		return err
 	}
-	return os.Rename(tmp, s.path)
+	for _, a := range as {
+		cfg, err := json.Marshal(a.Config)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`INSERT INTO agents(id, type, token_hash, config, updated) VALUES(?, ?, ?, ?, ?)`,
+			a.ID, a.Type, a.TokenHash, string(cfg), a.Updated.UTC().Format(time.RFC3339Nano)); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// ImportFile übernimmt einmalig die Agenten aus der Datei des früheren Speichers (agents.json). Die Datei bleibt
+// unverändert liegen; bereits vorhandene IDs werden nicht überschrieben. Danach wird sie nie wieder gelesen.
+func (s *Store) ImportFile(path string) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var done string
+	if err := s.db.QueryRow(`SELECT value FROM meta WHERE key='agents_imported'`).Scan(&done); err == nil {
+		return 0, nil
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return 0, err
+	}
+	n := 0
+	b, err := os.ReadFile(path)
+	switch {
+	case errors.Is(err, os.ErrNotExist): // nichts zu importieren
+	case err != nil:
+		return 0, err
+	default:
+		var old []Agent
+		if err := json.Unmarshal(b, &old); err != nil {
+			return 0, fmt.Errorf("%s: %w", path, err)
+		}
+		as, err := s.load()
+		if err != nil {
+			return 0, err
+		}
+		have := map[string]bool{}
+		for _, a := range as {
+			have[a.ID] = true
+		}
+		for _, a := range old {
+			if !have[a.ID] {
+				as, n = append(as, a), n+1
+			}
+		}
+		if err := s.save(as); err != nil {
+			return 0, err
+		}
+	}
+	_, err = s.db.Exec(`INSERT INTO meta(key, value) VALUES('agents_imported', ?)`, time.Now().UTC().Format(time.RFC3339))
+	return n, err
 }
 
 // List liefert alle Agenten nach ID sortiert.
@@ -82,8 +156,62 @@ func (s *Store) Get(id string) (Agent, error) {
 	return Agent{}, err
 }
 
+// Bundle meldet, ob der Agent ein Contao-Bundle ist.
+func (a Agent) Bundle() bool { return a.Type == report.AgentContaoBundle }
+
 // Create legt einen Agenten ohne Sites an und gibt das Token einmalig zurück.
 func (s *Store) Create(id string, now time.Time) (string, error) {
+	return s.create(id, "", agentcfg.Remote{}, now)
+}
+
+// CreateBundle legt ein Contao-Bundle an: ein Agent mit genau einer Site gleicher ID. Das Token wird einmalig zurückgegeben.
+func (s *Store) CreateBundle(id, name, siteURL string, now time.Time) (string, error) {
+	if err := checkBundle(name, siteURL); err != nil {
+		return "", err
+	}
+	site := agentcfg.Site{ID: id, Name: name, Kind: "contao", URL: siteURL}
+	return s.create(id, report.AgentContaoBundle, agentcfg.Remote{Sites: []agentcfg.Site{site}}, now)
+}
+
+// UpdateBundle ändert Anzeigename und URL eines Contao-Bundles.
+func (s *Store) UpdateBundle(id, name, siteURL string, now time.Time) error {
+	if err := checkBundle(name, siteURL); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	as, err := s.load()
+	if err != nil {
+		return err
+	}
+	for i := range as {
+		if as[i].ID == id && as[i].Bundle() && len(as[i].Config.Sites) == 1 {
+			as[i].Config.Sites[0].Name, as[i].Config.Sites[0].URL, as[i].Updated = name, siteURL, now.UTC()
+			return s.save(as)
+		}
+	}
+	return ErrNotFound
+}
+
+// checkBundle prüft, was in das YAML-Snippet des Bundles geschrieben wird.
+func checkBundle(name, siteURL string) error {
+	for _, v := range []string{name, siteURL} {
+		if strings.ContainsFunc(v, unicode.IsControl) {
+			return errors.New("Name und URL dürfen keine Steuerzeichen enthalten")
+		}
+	}
+	if len(name) > 200 || len(siteURL) > 300 {
+		return errors.New("Name oder URL zu lang")
+	}
+	if siteURL != "" {
+		if u, err := url.Parse(siteURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return fmt.Errorf("URL %q muss mit http:// oder https:// beginnen", siteURL)
+		}
+	}
+	return nil
+}
+
+func (s *Store) create(id, typ string, cfg agentcfg.Remote, now time.Time) (string, error) {
 	if !report.ValidID(id) {
 		return "", errors.New("ungültige ID (erlaubt: a-z, 0-9, -)")
 	}
@@ -97,12 +225,19 @@ func (s *Store) Create(id string, now time.Time) (string, error) {
 		if a.ID == id {
 			return "", fmt.Errorf("Agent %q gibt es schon", id)
 		}
+		for _, o := range a.Config.Sites {
+			for _, n := range cfg.Sites {
+				if o.ID == n.ID {
+					return "", fmt.Errorf("Site %q gehört schon zum Agenten %q", n.ID, a.ID)
+				}
+			}
+		}
 	}
 	tok, hash, err := auth.NewToken()
 	if err != nil {
 		return "", err
 	}
-	if err := s.save(append(as, Agent{ID: id, TokenHash: hash, Updated: now.UTC()})); err != nil {
+	if err := s.save(append(as, Agent{ID: id, Type: typ, TokenHash: hash, Config: cfg, Updated: now.UTC()})); err != nil {
 		return "", err
 	}
 	return tok, nil
@@ -135,6 +270,9 @@ func (s *Store) Save(id string, cfg agentcfg.Remote, now time.Time) error {
 	}
 	if idx < 0 {
 		return ErrNotFound
+	}
+	if as[idx].Bundle() {
+		return errors.New("ein Contao-Bundle hat keine Konfiguration von Sitewatch")
 	}
 	as[idx].Config, as[idx].Updated = cfg, now.UTC()
 	return s.save(as)

@@ -59,40 +59,29 @@ Dann `systemctl enable --now sitewatch`. Der Dienst lauscht auf `127.0.0.1:8080`
 - **Login:** OIDC (getestet mit Authentik). Zugriff über `-allow-group`, `-allow-email` oder `-allow-sub`. Ohne Login-Konfiguration
   startet `serve` nicht; nur zum Entwickeln gibt es `-no-login`. Nur `/api/` (Agent-Token) und `/healthz` sind ohne Login erreichbar.
   `-trusted-proxy` ist die IP/das Netz des Proxys, sonst teilen sich alle Clients dessen IP und damit ein Rate-Limit.
-- **Daten:** `/var/lib/sitewatch` (`sitewatch.db`, `signing.key`, `agents.json`, `tokens.json`). Gehört in die Sicherung;
+- **Daten:** `/var/lib/sitewatch` (`sitewatch.db` mit Reports, Agenten und Aufträgen sowie `signing.key`). Gehört in die Sicherung;
   ohne `signing.key` müssten alle Agenten den neuen öffentlichen Schlüssel erhalten. Die Datenbank sichert man mit
   `sqlite3 sitewatch.db ".backup ziel.db"`.
 - **Alarm per E-Mail:** `-alert-to`, `-alert-from`, `-alert-smtp`; Zugang über `SITEWATCH_SMTP_USER` und `SITEWATCH_SMTP_PASSWORD`.
   Mit gesetztem `-alert-to` erscheint in der Fußzeile der Knopf „Testmail senden"; ohne Oberfläche geht es mit
   `sitewatch alert-test -alert-to … -alert-from … -alert-smtp …` (Zugang wieder über die beiden Umgebungsvariablen).
-- **Schwellwerte** (Standardwerte, alle optional): `sitewatch serve -thresholds schwellen.json`. Fehlende Felder behalten den
-  Standard, unbekannte Felder oder Werte unter 1 lassen den Start scheitern.
-
-  ```json
-  {
-  "stale_after_minutes": 15,
-  "error_warn": 10,
-  "eol_warn_days": 90,
-  "tls_warn_days": 14,
-  "backup_max_hours": 36,
-  "disk_warn_pct": 15,
-  "disk_crit_pct": 5,
-  "cron_warn_minutes": 120,
-  "cron_crit_minutes": 240,
-  "maintenance_warn_minutes": 120,
-  "maintenance_crit_minutes": 480,
-  "history_full_days": 30,
-  "history_6h_days": 90,
-  "history_max_days": 365,
-  "history_reports_days": 90
-  }
-  ```
-
-  `disk_*_pct` ist der freie Speicher in Prozent. Der Verlauf wird mit der Zeit verdichtet (30 Tage jeder Punkt, bis 90 Tage
-  alle 6 Stunden, bis 365 Tage einer je Tag).
+- **Schwellwerte:** im Dashboard unter **Einstellungen** (Standardwerte, jeder Wert einzeln änderbar, mit Prüfung auf
+  Widersprüche und Knopf „zurücksetzen“). Sie stehen in der Datenbank und gelten sofort für Anzeige und Alarme; die Aufbewahrung
+  des Verlaufs greift bei der nächsten täglichen Bereinigung. Gespeichert werden nur Werte, die vom Standard abweichen. Die
+  Flags `-thresholds` und `-stale` gibt es nicht mehr (sie werden mit einem Hinweis ignoriert). Standard: keine Meldung nach
+  15 Minuten (Server-Agent) bzw. 180 Minuten (Contao-Bundle), Support-Ende 90 Tage vorher, TLS 14 Tage, Backup älter als 36 Stunden,
+  Speicher unter 15 % (kritisch unter 5 %), Contao-Cron älter als 2 bzw. 4 Stunden, Wartungsmodus nach 2 bzw. 8 Stunden,
+  Verlauf: 30 Tage jeder Punkt, bis 90 Tage alle 6 Stunden, bis 365 Tage einer je Tag.
 - **Support-Enden:** Das Dashboard ruft täglich endoflife.date ab (`-eol=false` schaltet das aus).
 
 ### 2. Agent anlegen
+
+**Zwei Typen:** der *Server-Agent* (unten) und das *Contao-Bundle* für Hosting ohne eigene Programme (z. B. Shared
+Hosting). Beim Anlegen wählst du den Typ. Für das Bundle gibst du Site-ID, Anzeigename und URL an und bekommst statt der
+`bootstrap.json` den Block für die `config/config.yaml` mit Token (das Bundle `cgoit/contao-sitewatch-bundle` muss
+installiert sein). Es meldet stündlich über den Contao-Cron, ohne Konfiguration abzurufen und ohne Aufträge. Updates,
+Sicherheitshinweise, Migrationen, Backups, TLS und Serverwerte prüft es nicht (Anzeige „–“). Für „keine Meldung“ gilt
+der Wert „Keine Meldung seit (Contao-Bundle)“ unter Einstellungen (Standard 180 Minuten) statt dem für Server-Agenten.
 
 Im Dashboard unter **Agenten** einen Agenten anlegen (einer je Server). Das Token erscheint **einmalig**, zusammen mit dem
 Block für die lokale Datei. Dort legst du auch die Sites fest (Art, URL, Pfade, Backup-Verzeichnis, `ignore_updates`,
@@ -180,10 +169,11 @@ Gegen eine echte Site, ohne Server-Einrichtung:
 
 ```sh
 go build -o bin/ ./cmd/...
-bin/sitewatch token meine-site > token.txt             # Token einmalig anzeigen, Hash landet in tokens.json
 bin/sitewatch serve -addr 127.0.0.1:8080 -no-login     # nur lokal; für den Betrieb OIDC einrichten
+# Im Dashboard (http://127.0.0.1:8080/agents) einen Agenten anlegen: Typ „Contao-Bundle“ mit der Site-ID, oder einen
+# Server-Agenten und die Site eintragen. Das Token erscheint einmalig, nur sein Hash wird gespeichert.
 bin/agent -site-id meine-site -name "Meine Site" -kind contao -url https://example.org \
-  -path /var/www/meine-site -sitewatch http://127.0.0.1:8080 -token "$(cat token.txt)" -once
+  -path /var/www/meine-site -sitewatch http://127.0.0.1:8080 -token "TOKEN-AUS-DEM-DASHBOARD" -once
 ```
 
 Mit `-dry-run` gibt der Agent den Report nur aus, ohne zu senden. `-spool <dir>` puffert Reports, wenn das Dashboard nicht erreichbar ist.

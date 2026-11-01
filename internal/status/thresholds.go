@@ -1,88 +1,139 @@
 package status
 
 import (
-	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"os"
+	"sync"
 	"time"
 )
 
-// thresholdFile ist die optionale Schwellenwert-Datei von Sitewatch. Fehlende Felder behalten den Standardwert.
-// Einheiten stehen im Namen, damit es keine Parsing-Fallen gibt (time.ParseDuration kennt keine Tage).
-type thresholdFile struct {
-	StaleAfterMinutes *int `json:"stale_after_minutes"`
-	ErrorWarn         *int `json:"error_warn"`
-	EOLWarnDays       *int `json:"eol_warn_days"`
-	TLSWarnDays       *int `json:"tls_warn_days"`
-	BackupMaxHours    *int `json:"backup_max_hours"`
-	DiskWarnPct       *int `json:"disk_warn_pct"`
-	DiskCritPct       *int `json:"disk_crit_pct"`
-	CronWarnMinutes   *int `json:"cron_warn_minutes"`
-	CronCritMinutes   *int `json:"cron_crit_minutes"`
-	MaintWarnMinutes  *int `json:"maintenance_warn_minutes"`
-	MaintCritMinutes  *int `json:"maintenance_crit_minutes"`
-	HistoryFullDays   *int `json:"history_full_days"`
-	HistorySixHDays   *int `json:"history_6h_days"`
-	HistoryMaxDays    *int `json:"history_max_days"`
-	HistoryReportDays *int `json:"history_reports_days"`
+// Field ist ein Schwellwert, der im Cockpit gepflegt wird. Die Einheit steht im Schlüssel und in Unit, damit es keine
+// Parsing-Fallen gibt (time.ParseDuration kennt keine Tage). Reihenfolge und Group bestimmen die Anzeige.
+type Field struct {
+	Key, Group, Label, Unit string
+	Get                     func(Config) int
+	Set                     func(*Config, int)
 }
 
-// LoadThresholds überlagert cfg mit den Werten aus der JSON-Datei. Leerer Pfad = cfg unverändert.
-func LoadThresholds(path string, cfg Config) (Config, error) {
-	if path == "" {
-		return cfg, nil
+func durField(key, group, label, unit string, unitDur time.Duration, p func(*Config) *time.Duration) Field {
+	return Field{key, group, label, unit,
+		func(c Config) int { return int(*p(&c) / unitDur) },
+		func(c *Config, n int) { *p(c) = time.Duration(n) * unitDur }}
+}
+
+func intField(key, group, label, unit string, p func(*Config) *int) Field {
+	return Field{key, group, label, unit, func(c Config) int { return *p(&c) }, func(c *Config, n int) { *p(c) = n }}
+}
+
+const (
+	gReports = "Meldungen"
+	gVersion = "Versionen und Zertifikate"
+	gBackup  = "Backups"
+	gDisk    = "Speicherplatz"
+	gCron    = "Contao-Cron"
+	gMaint   = "Wartungsmodus"
+	gHistory = "Aufbewahrung des Verlaufs"
+)
+
+// Fields sind alle pflegbaren Schwellwerte. Fehlende Werte behalten den Standard aus DefaultConfig.
+var Fields = []Field{
+	durField("stale_after_minutes", gReports, "Keine Meldung seit (Server-Agent): kritisch", "Minuten", time.Minute, func(c *Config) *time.Duration { return &c.StaleAfter }),
+	durField("bundle_stale_after_minutes", gReports, "Keine Meldung seit (Contao-Bundle): kritisch", "Minuten", time.Minute, func(c *Config) *time.Duration { return &c.BundleStaleAfter }),
+	intField("error_warn", gReports, "Fehler in 24 Stunden: Warnung ab", "Fehler", func(c *Config) *int { return &c.ErrorWarn }),
+	durField("eol_warn_days", gVersion, "Support-Ende: Warnung, wenn näher als", "Tage", 24*time.Hour, func(c *Config) *time.Duration { return &c.EOLWarn }),
+	durField("tls_warn_days", gVersion, "TLS-Zertifikat: Warnung, wenn es früher abläuft als", "Tage", 24*time.Hour, func(c *Config) *time.Duration { return &c.TLSWarn }),
+	durField("backup_max_hours", gBackup, "Letztes Backup: Warnung, wenn älter als", "Stunden", time.Hour, func(c *Config) *time.Duration { return &c.BackupMax }),
+	intField("disk_warn_pct", gDisk, "Freier Speicher: Warnung unter", "%", func(c *Config) *int { return &c.DiskWarn }),
+	intField("disk_crit_pct", gDisk, "Freier Speicher: kritisch unter", "%", func(c *Config) *int { return &c.DiskCrit }),
+	durField("cron_warn_minutes", gCron, "Letzter Cron-Lauf: Warnung, wenn älter als", "Minuten", time.Minute, func(c *Config) *time.Duration { return &c.CronWarn }),
+	durField("cron_crit_minutes", gCron, "Letzter Cron-Lauf: kritisch, wenn älter als", "Minuten", time.Minute, func(c *Config) *time.Duration { return &c.CronCrit }),
+	durField("maintenance_warn_minutes", gMaint, "Wartungsmodus an: Warnung nach", "Minuten", time.Minute, func(c *Config) *time.Duration { return &c.MaintWarn }),
+	durField("maintenance_crit_minutes", gMaint, "Wartungsmodus an: kritisch nach", "Minuten", time.Minute, func(c *Config) *time.Duration { return &c.MaintCrit }),
+	intField("history_full_days", gHistory, "Jeder Messpunkt bis", "Tage", func(c *Config) *int { return &c.Retention.FullDays }),
+	intField("history_6h_days", gHistory, "Ein Punkt je 6 Stunden bis", "Tage", func(c *Config) *int { return &c.Retention.SixHourDays }),
+	intField("history_max_days", gHistory, "Ein Punkt je Tag bis (danach gelöscht)", "Tage", func(c *Config) *int { return &c.Retention.MaxDays }),
+	intField("history_reports_days", gHistory, "Vollständige Tagesstände bis", "Tage", func(c *Config) *int { return &c.Retention.ReportDays }),
+}
+
+// maxValue begrenzt jeden Wert, damit keine Zeitspanne beim Umrechnen überläuft.
+const maxValue = 1_000_000
+
+// Values liefert die aktuellen Werte nach Schlüssel.
+func (c Config) Values() map[string]int {
+	m := make(map[string]int, len(Fields))
+	for _, f := range Fields {
+		m[f.Key] = f.Get(c)
 	}
-	data, err := os.ReadFile(path)
+	return m
+}
+
+// With übernimmt die Werte (Schlüssel aus Fields) und prüft die Abhängigkeiten. Unbekannte Schlüssel und Werte unter 1 sind Fehler,
+// c bleibt dann unverändert. Fehlende Schlüssel behalten ihren Wert.
+func (c Config) With(vals map[string]int) (Config, error) {
+	next, err := c.with(vals)
 	if err != nil {
-		return cfg, err
+		return c, err
 	}
-	var f thresholdFile
-	dec := json.NewDecoder(bytes.NewReader(data))
-	dec.DisallowUnknownFields() // Tippfehler nicht stillschweigend ignorieren
-	if err := dec.Decode(&f); err != nil {
-		return cfg, fmt.Errorf("%s: %w", path, err)
+	return next, nil
+}
+
+// WithJSON übernimmt gespeicherte Werte (JSON-Objekt Schlüssel → Zahl); bei Fehlern bleibt c unverändert.
+func (c Config) WithJSON(raw string) (Config, error) {
+	var vals map[string]int
+	if err := json.Unmarshal([]byte(raw), &vals); err != nil {
+		return c, fmt.Errorf("kein gültiges JSON: %w", err)
 	}
-	for name, v := range map[string]struct {
-		val *int
-		set func(int)
-	}{
-		"stale_after_minutes":      {f.StaleAfterMinutes, func(n int) { cfg.StaleAfter = time.Duration(n) * time.Minute }},
-		"error_warn":               {f.ErrorWarn, func(n int) { cfg.ErrorWarn = n }},
-		"eol_warn_days":            {f.EOLWarnDays, func(n int) { cfg.EOLWarn = time.Duration(n) * 24 * time.Hour }},
-		"tls_warn_days":            {f.TLSWarnDays, func(n int) { cfg.TLSWarn = time.Duration(n) * 24 * time.Hour }},
-		"backup_max_hours":         {f.BackupMaxHours, func(n int) { cfg.BackupMax = time.Duration(n) * time.Hour }},
-		"disk_warn_pct":            {f.DiskWarnPct, func(n int) { cfg.DiskWarn = n }},
-		"cron_warn_minutes":        {f.CronWarnMinutes, func(n int) { cfg.CronWarn = time.Duration(n) * time.Minute }},
-		"history_full_days":        {f.HistoryFullDays, func(n int) { cfg.Retention.FullDays = n }},
-		"history_6h_days":          {f.HistorySixHDays, func(n int) { cfg.Retention.SixHourDays = n }},
-		"history_max_days":         {f.HistoryMaxDays, func(n int) { cfg.Retention.MaxDays = n }},
-		"history_reports_days":     {f.HistoryReportDays, func(n int) { cfg.Retention.ReportDays = n }},
-		"maintenance_warn_minutes": {f.MaintWarnMinutes, func(n int) { cfg.MaintWarn = time.Duration(n) * time.Minute }},
-		"maintenance_crit_minutes": {f.MaintCritMinutes, func(n int) { cfg.MaintCrit = time.Duration(n) * time.Minute }},
-		"cron_crit_minutes":        {f.CronCritMinutes, func(n int) { cfg.CronCrit = time.Duration(n) * time.Minute }},
-		"disk_crit_pct":            {f.DiskCritPct, func(n int) { cfg.DiskCrit = n }},
-	} {
-		if v.val == nil {
-			continue
+	return c.With(vals)
+}
+
+func (c Config) with(vals map[string]int) (Config, error) {
+	byKey := make(map[string]Field, len(Fields))
+	for _, f := range Fields {
+		byKey[f.Key] = f
+	}
+	for k, n := range vals {
+		f, ok := byKey[k]
+		switch {
+		case !ok:
+			return c, fmt.Errorf("unbekannter Schwellwert %q", k)
+		case n < 1 || n > maxValue:
+			return c, fmt.Errorf("%s: muss zwischen 1 und %d liegen", f.Label, maxValue)
 		}
-		if *v.val < 1 {
-			return cfg, fmt.Errorf("%s: %s muss mindestens 1 sein", path, name)
+	}
+	for _, f := range Fields { // in der Reihenfolge der Liste, damit Fehler reproduzierbar bleiben
+		if n, ok := vals[f.Key]; ok {
+			f.Set(&c, n)
 		}
-		v.set(*v.val)
 	}
-	if cfg.DiskWarn > 100 || cfg.DiskCrit > cfg.DiskWarn {
-		return cfg, errors.New(path + ": disk_crit_pct darf nicht größer als disk_warn_pct sein, disk_warn_pct höchstens 100")
+	switch r := c.Retention; {
+	case c.DiskWarn > 100 || c.DiskCrit > c.DiskWarn:
+		return c, fmt.Errorf("Freier Speicher: kritisch darf nicht über der Warnung liegen, die Warnung höchstens 100 %%")
+	case c.MaintWarn > c.MaintCrit:
+		return c, fmt.Errorf("Wartungsmodus: die Warnung darf nicht später kommen als der kritische Wert")
+	case c.CronWarn > c.CronCrit:
+		return c, fmt.Errorf("Contao-Cron: die Warnung darf nicht später kommen als der kritische Wert")
+	case r.FullDays > r.SixHourDays || r.SixHourDays > r.MaxDays:
+		return c, fmt.Errorf("Aufbewahrung: es muss gelten jeder Punkt ≤ 6 Stunden ≤ je Tag")
 	}
-	if cfg.MaintWarn > cfg.MaintCrit {
-		return cfg, errors.New(path + ": maintenance_warn_minutes darf nicht größer als maintenance_crit_minutes sein")
-	}
-	if cfg.CronWarn > cfg.CronCrit {
-		return cfg, errors.New(path + ": cron_warn_minutes darf nicht größer als cron_crit_minutes sein")
-	}
-	if r := cfg.Retention; r.FullDays > r.SixHourDays || r.SixHourDays > r.MaxDays {
-		return cfg, errors.New(path + ": es muss gelten history_full_days <= history_6h_days <= history_max_days")
-	}
-	return cfg, nil
+	return c, nil
+}
+
+// Settings hält die Schwellwerte, die zur Laufzeit im Cockpit geändert werden. Evaluate bekommt jeweils eine Kopie.
+type Settings struct {
+	mu  sync.RWMutex
+	cfg Config
+}
+
+func NewSettings(c Config) *Settings { return &Settings{cfg: c} }
+
+func (s *Settings) Get() Config {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cfg
+}
+
+func (s *Settings) Set(c Config) {
+	s.mu.Lock()
+	s.cfg = c
+	s.mu.Unlock()
 }

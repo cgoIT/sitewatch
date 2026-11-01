@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"sitewatch/internal/agents"
-	"sitewatch/internal/auth"
 	"sitewatch/internal/report"
 	"sitewatch/internal/status"
 	"sitewatch/internal/store"
@@ -26,10 +25,13 @@ var templateFS embed.FS
 
 // Server bündelt die Abhängigkeiten der Handler.
 type Server struct {
-	Store      store.Store
-	TokensPath string
-	Status     status.Config
-	Now        func() time.Time
+	Store store.Store
+	// Settings sind die Schwellwerte; SaveSettings speichert eine Änderung aus dem Cockpit (vals = nur die vom Standard abweichenden
+	// Werte, nil = zurück auf die Standardwerte) und übernimmt sie in Settings.
+	Settings     *status.Settings
+	SaveSettings func(cfg status.Config, vals map[string]int) error
+	settingsMu   sync.Mutex
+	Now          func() time.Time
 	// Protect schützt die Oberfläche (Login). nil = offen; die Agent-API ist nie betroffen.
 	Protect func(http.Handler) http.Handler
 	// Agents und SignKey schalten die Fernkonfiguration der Agenten ein (Config-API und Seiten unter /agents); nil = aus.
@@ -58,8 +60,9 @@ type Server struct {
 	fetched map[string]time.Time // wann der Agent die Konfiguration zuletzt abgeholt hat (nur im Speicher)
 }
 
-func New(s store.Store, tokensPath string, cfg status.Config) *Server {
-	srv := &Server{Store: s, TokensPath: tokensPath, Status: cfg, Now: time.Now}
+func New(s store.Store, cfg status.Config) *Server {
+	srv := &Server{Store: s, Settings: status.NewSettings(cfg), Now: time.Now}
+	srv.SaveSettings = func(c status.Config, _ map[string]int) error { srv.Settings.Set(c); return nil } // ohne Speicher nur im Arbeitsspeicher
 	srv.tpl = template.Must(template.New("").Funcs(template.FuncMap{
 		"version":     srv.versionText,
 		"hasTestMail": func() bool { return srv.TestMail != nil },
@@ -80,6 +83,7 @@ func (s *Server) Handler() http.Handler {
 	if s.TestMail != nil {
 		ui.HandleFunc("POST /alert-test", s.testMail)
 	}
+	s.settingsRoutes(ui)
 	if s.Agents != nil {
 		s.agentRoutes(ui)
 	}
@@ -124,22 +128,19 @@ func securityHeaders(next http.Handler) http.Handler {
 
 // ingest nimmt einen Report entgegen. Das Token muss zur Site-ID im Report passen.
 func (s *Server) ingest(w http.ResponseWriter, r *http.Request) {
+	a, ok := s.agentByToken(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
+	if !ok { // vor dem Lesen des Bodys
+		http.Error(w, "nicht autorisiert", http.StatusUnauthorized)
+		return
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var rep report.Report
 	if err := json.NewDecoder(r.Body).Decode(&rep); err != nil {
 		http.Error(w, "ungültiges JSON", http.StatusBadRequest)
 		return
 	}
-	token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-	tokens, err := auth.Load(s.TokensPath)
-	if err != nil {
-		log.Printf("Tokens nicht lesbar: %v", err)
-		http.Error(w, "interner Fehler", http.StatusInternalServerError)
-		return
-	}
-	if !auth.Check(tokens, rep.Site.ID, token) && !s.agentMayReport(token, rep.Site.ID) {
-		_, known := tokens[rep.Site.ID]
-		log.Printf("report: Token abgelehnt für site=%q (Site registriert: %t)", rep.Site.ID, known)
+	if !agentMayReport(a, &rep) {
+		log.Printf("report: Token abgelehnt für site=%q (Agent %q)", rep.Site.ID, a.ID)
 		http.Error(w, "nicht autorisiert", http.StatusUnauthorized)
 		return
 	}
@@ -150,7 +151,7 @@ func (s *Server) ingest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	e := store.Entry{Report: rep, ReceivedAt: now.UTC()}
-	if err := s.Store.Save(e, int(status.Evaluate(&rep, now, now, s.Status).Level)); err != nil {
+	if err := s.Store.Save(e, int(status.Evaluate(&rep, now, now, s.cfg()).Level)); err != nil {
 		log.Printf("Speichern fehlgeschlagen: %v", err)
 		http.Error(w, "interner Fehler", http.StatusInternalServerError)
 		return
@@ -165,10 +166,14 @@ type row struct {
 	Level, Label, Icon               string
 	Reasons                          []string
 	Maintenance                      bool
+	Reported                         bool // es gibt einen Report, nur dann gibt es eine Detailseite
 	UpdatesTrend                     *arrow
 }
 
 type tiles struct{ Total, Contao, PHP, Crit, Warn, Updates int }
+
+// cfg liefert die aktuellen Schwellwerte.
+func (s *Server) cfg() status.Config { return s.Settings.Get() }
 
 func (s *Server) rows(base map[string]store.Sample) ([]row, tiles, error) {
 	entries, err := s.Store.Latest()
@@ -186,24 +191,26 @@ func (s *Server) rows(base map[string]store.Sample) ([]row, tiles, error) {
 	for _, e := range entries {
 		seen[e.Report.Site.ID] = true
 		rep := e.Report
-		res := status.Evaluate(&rep, e.ReceivedAt, now, s.Status)
+		res := status.Evaluate(&rep, e.ReceivedAt, now, s.cfg())
 		rw := row{
 			ID: rep.Site.ID, Name: rep.Site.Name, URL: rep.Site.URL, Kind: rep.Site.Kind, Contao: dash(rep.Site.Contao), PHP: dash(rep.Site.PHP),
 			Updates: "–", Errors: "–", Seen: status.Ago(now.Sub(e.ReceivedAt)),
 			Reasons:     res.Reasons,
-			Maintenance: rep.Site.MaintenanceMode != nil && *rep.Site.MaintenanceMode,
+			Maintenance: rep.Site.MaintenanceMode != nil && *rep.Site.MaintenanceMode, Reported: true,
 		}
 		if rep.Site.Kind == "contao" {
-			rw.Updates = fmt.Sprint(rep.Site.OpenUpdates())
-			b, ok := base[rep.Site.ID]
-			rw.UpdatesTrend = updatesArrow(rep.Site.OpenUpdates(), b, ok, now)
+			if rep.Agent.Type != report.AgentContaoBundle { // das Bundle prüft keine Updates: "–" statt einer falschen 0
+				rw.Updates = fmt.Sprint(rep.Site.OpenUpdates())
+				b, ok := base[rep.Site.ID]
+				rw.UpdatesTrend = updatesArrow(rep.Site.OpenUpdates(), b, ok, now)
+				t.Updates += rep.Site.OpenUpdates()
+			}
 			n := 0
 			for _, le := range rep.Errors {
 				n += le.Count
 			}
 			rw.Errors = fmt.Sprint(n)
 			t.Contao++
-			t.Updates += rep.Site.OpenUpdates()
 		} else if rep.Site.Kind == "php" {
 			t.PHP++
 		}
@@ -362,14 +369,14 @@ func (s *Server) detail(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("detail: Verlauf: %v", err)
 	}
-	tr := buildTrend(hist, rangeDays(r), s.Now(), cur.Report.Site.Kind == "contao", s.Status)
+	tr := buildTrend(hist, rangeDays(r), s.Now(), cur.Report.Site.Kind == "contao", s.cfg())
 	hist = hist[:min(len(hist), 20)]
 	rep := cur.Report
 	evalAt := s.Now()
 	if day != "" {
 		evalAt = cur.ReceivedAt // Bewertung wie damals, sonst wäre jeder alte Stand „keine Meldung"
 	}
-	res := status.Evaluate(&rep, cur.ReceivedAt, evalAt, s.Status)
+	res := status.Evaluate(&rep, cur.ReceivedAt, evalAt, s.cfg())
 	rw := row{Reasons: res.Reasons}
 	setLevel(&rw, res.Level)
 

@@ -212,3 +212,29 @@ func TestDays(t *testing.T) {
 		t.Error("unbekannter Tag")
 	}
 }
+
+func TestSettings(t *testing.T) {
+	st, err := OpenSQLite(filepath.Join(t.TempDir(), "s.db"), DefaultRetention())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if _, ok, err := st.Setting("thresholds"); ok || err != nil {
+		t.Fatalf("ungesetzt: %v %v", ok, err)
+	}
+	if err := st.SetSetting("thresholds", `{"a":1}`); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetSetting("thresholds", `{"a":2}`); err != nil { // überschreiben
+		t.Fatal(err)
+	}
+	if v, ok, _ := st.Setting("thresholds"); !ok || v != `{"a":2}` {
+		t.Errorf("gelesen: %q %v", v, ok)
+	}
+	if err := st.DeleteSetting("thresholds"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, _ := st.Setting("thresholds"); ok {
+		t.Error("nicht gelöscht")
+	}
+}

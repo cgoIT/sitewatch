@@ -4,10 +4,15 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"testing"
 	"time"
 )
+
+// memCache ist ein Zwischenspeicher im Arbeitsspeicher (in Sitewatch die Datenbank).
+type memCache map[string]string
+
+func (m memCache) Setting(key string) (string, bool, error) { v, ok := m[key]; return v, ok, nil }
+func (m memCache) SetSetting(key, value string) error       { m[key] = value; return nil }
 
 func server(t *testing.T, fail *bool) *httptest.Server {
 	t.Helper()
@@ -24,8 +29,8 @@ func TestRefreshLookupAndCache(t *testing.T) {
 	fail := false
 	srv := server(t, &fail)
 	defer srv.Close()
-	cache := filepath.Join(t.TempDir(), "eol.json")
-	p := &Provider{CacheFile: cache, BaseURL: srv.URL + "/"}
+	cache := memCache{}
+	p := &Provider{Cache: cache, BaseURL: srv.URL + "/"}
 	if err := p.Refresh(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -47,12 +52,24 @@ func TestRefreshLookupAndCache(t *testing.T) {
 		t.Error("alte Daten verloren")
 	}
 
-	q := &Provider{CacheFile: cache} // Neustart: Zwischenspeicher
+	q := &Provider{Cache: cache} // Neustart: Zwischenspeicher
 	if err := q.Load(); err != nil {
 		t.Fatal(err)
 	}
 	if got, ok := q.EOL("nginx", "1.0"); !ok || got.Before(time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC)) {
 		t.Fatalf("Cache: %v %v", got, ok)
+	}
+}
+
+func TestLoadWithoutCacheOrData(t *testing.T) {
+	if err := (&Provider{}).Load(); err != nil {
+		t.Errorf("ohne Cache: %v", err)
+	}
+	if err := (&Provider{Cache: memCache{}}).Load(); err != nil {
+		t.Errorf("leerer Cache: %v", err)
+	}
+	if err := (&Provider{Cache: memCache{cacheKey: "kein json"}}).Load(); err == nil {
+		t.Error("defekter Cache ohne Fehler")
 	}
 }
 

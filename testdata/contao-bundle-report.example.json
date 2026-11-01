@@ -1,0 +1,32 @@
+{
+    "schema": 1,
+    "agent": {
+        "type": "contao-bundle",
+        "version": "1.0.0+no-version-set"
+    },
+    "host": {
+        "name": "beispiel-host"
+    },
+    "site": {
+        "id": "beispiel-seite",
+        "name": "Beispiel-Seite",
+        "kind": "contao",
+        "php": "8.3.36",
+        "cron_last_run": "2026-11-01T10:00:00+00:00",
+        "packages_total": 234,
+        "outdated": [],
+        "advisories": [],
+        "url": "https://beispiel.example.org",
+        "contao": "5.7.15",
+        "maintenance_mode": false
+    },
+    "errors": [
+        {
+            "time": "2026-11-01T09:30:00+00:00",
+            "level": "CRITICAL",
+            "message": "Boom",
+            "count": 1
+        }
+    ],
+    "collected_at": "2026-11-01T10:00:00+00:00"
+}

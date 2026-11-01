@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sitewatch – Contao-Bundle {{.Agent.ID}}</title>{{template "css"}}</head>
+<body>{{template "top" "agents"}}
+<main>
+<div><a href="/agents" style="font-size:13px;text-decoration:none">← Alle Agenten</a>
+<h1 style="margin:8px 0 0;font-size:26px;font-weight:600">Contao-Bundle {{.Agent.ID}}</h1>
+<div class="sub" style="margin-top:4px">Meldet selbst per Contao-Cron an Sitewatch und holt keine Konfiguration ab. Die Site-ID ist <span class="mono">{{.Site.ID}}</span>.</div></div>
+{{if .Error}}<div class="banner">{{.Error}}</div>{{end}}
+<section class="card"><h2>Site</h2><div class="pad">
+  <form method="post" action="/agents/{{.Agent.ID}}" class="inline"><div class="fgrid">
+    <label class="f">Anzeigename<input name="name" value="{{.Site.Name}}"></label>
+    <label class="f">URL der Seite (nur zur Anzeige)<input name="site_url" value="{{.Site.URL}}"></label>
+  </div><p><button class="btn primary" type="submit">Speichern</button></p></form>
+</div></section>
+<section class="card"><h2>Block für <span class="mono">config/config.yaml</span></h2><div class="pad">
+  <pre class="code">{{.Snippet}}</pre>
+  <p class="muted" style="font-size:13px">Das echte Token wird nur beim Anlegen und beim Erneuern angezeigt; hier steht ein Platzhalter. Nach einer Änderung von Name oder URL den Block auf dem Server anpassen.</p>
+</div></section>
+<section class="card"><h2>Token und Löschen</h2><div class="pad" style="display:flex;gap:12px;flex-wrap:wrap">
+  <form method="post" action="/agents/{{.Agent.ID}}/rotate"><button class="btn" type="submit">Token erneuern (das alte wird ungültig)</button></form>
+  <form method="post" action="/agents/{{.Agent.ID}}/delete"><label class="chk"><input type="checkbox" name="confirm" value="1" required> Löschen bestätigen</label> <button class="btn danger" type="submit">Contao-Bundle löschen</button></form>
+</div></section>
+</main>{{template "foot"}}</body></html>

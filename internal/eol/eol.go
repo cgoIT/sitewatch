@@ -10,8 +10,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -24,11 +22,19 @@ const baseURL = "https://endoflife.date/api/v1/products/"
 
 const maxBody = 4 << 20 // Antworten sind klein; das Limit schützt vor einer defekten oder manipulierten Quelle
 
+// Cache hält den Zwischenspeicher als Text; store.SQLite erfüllt das (Einstellungen in der Datenbank).
+type Cache interface {
+	Setting(key string) (value string, ok bool, err error)
+	SetSetting(key, value string) error
+}
+
+const cacheKey = "eol"
+
 // Provider liefert das Support-Ende je Produkt und Minor-Version ("8.5", "5.7", "11.4", "1.30").
 type Provider struct {
-	CacheFile string       // optional: Zwischenspeicher, damit nach einem Neustart sofort Daten da sind
-	BaseURL   string       // nur für Tests; leer = endoflife.date
-	Client    *http.Client // nil = Client mit Timeout
+	Cache   Cache        // optional: Zwischenspeicher, damit nach einem Neustart sofort Daten da sind
+	BaseURL string       // nur für Tests; leer = endoflife.date
+	Client  *http.Client // nil = Client mit Timeout
 
 	mu   sync.RWMutex
 	data map[string]map[string]time.Time // Produkt -> Minor -> eolFrom
@@ -54,21 +60,18 @@ func Minor(v string) string {
 	return parts[0] + "." + parts[1]
 }
 
-// Load liest den Zwischenspeicher. Eine fehlende Datei ist kein Fehler.
+// Load liest den Zwischenspeicher. Ein leerer Zwischenspeicher ist kein Fehler.
 func (p *Provider) Load() error {
-	if p.CacheFile == "" {
+	if p.Cache == nil {
 		return nil
 	}
-	b, err := os.ReadFile(p.CacheFile)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
+	raw, ok, err := p.Cache.Setting(cacheKey)
+	if err != nil || !ok {
 		return err
 	}
 	var d map[string]map[string]time.Time
-	if err := json.Unmarshal(b, &d); err != nil {
-		return fmt.Errorf("%s: %w", p.CacheFile, err)
+	if err := json.Unmarshal([]byte(raw), &d); err != nil {
+		return fmt.Errorf("Zwischenspeicher: %w", err)
 	}
 	p.mu.Lock()
 	p.data = d
@@ -107,18 +110,14 @@ func (p *Provider) Refresh(ctx context.Context) error {
 }
 
 func (p *Provider) save(d map[string]map[string]time.Time) error {
-	if p.CacheFile == "" {
+	if p.Cache == nil {
 		return nil
 	}
 	b, err := json.Marshal(d)
 	if err != nil {
 		return err
 	}
-	tmp := p.CacheFile + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, p.CacheFile)
+	return p.Cache.SetSetting(cacheKey, string(b))
 }
 
 func (p *Provider) fetch(ctx context.Context, product string) (map[string]time.Time, error) {
@@ -188,6 +187,3 @@ func (p *Provider) Run(ctx context.Context, every time.Duration) {
 		}
 	}
 }
-
-// CachePath legt den Zwischenspeicher im Datenverzeichnis ab.
-func CachePath(dataDir string) string { return filepath.Join(dataDir, "eol.json") }
