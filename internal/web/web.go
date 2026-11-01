@@ -433,6 +433,8 @@ func (s *Server) siteDelete(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	// shortcut: Prüfen und Löschen sind nicht atomar; legt ein zweiter Admin genau dazwischen einen Agenten für die Site an, gehen deren
+	// Verlauf und Aufträge verloren (der nächste Report stellt den Rest wieder her). Bei mehreren Admins mit einem Mutex sperren.
 	if !s.orphan(id) {
 		http.Error(w, "die Site gehört noch zu einem Agenten", http.StatusConflict)
 		return

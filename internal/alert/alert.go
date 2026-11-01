@@ -61,6 +61,15 @@ func (w *Watcher) Check() {
 	if w.Settings != nil {
 		cfg = w.Settings.Get()
 	}
+	present := map[string]bool{}
+	for _, e := range entries {
+		present[e.Report.Site.ID] = true
+	}
+	for id := range w.crit { // gelöschte Sites vergessen, sonst bliebe ein neu angelegter Gleichname stumm
+		if !present[id] {
+			delete(w.crit, id)
+		}
+	}
 	for _, e := range entries {
 		id := e.Report.Site.ID
 		res := status.Evaluate(&e.Report, e.ReceivedAt, now, cfg)

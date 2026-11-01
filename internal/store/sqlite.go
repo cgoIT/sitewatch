@@ -295,7 +295,9 @@ func (s *SQLite) AlertState() (map[string]bool, error) {
 	return out, rows.Err()
 }
 
-// DeleteSite entfernt alle Daten der Site: Tagesstände, Verlauf, Alarmzustand und Aufträge samt Ausgabe. Gibt es nichts, ist das kein Fehler.
+// DeleteSite entfernt alle Daten der Site: Tagesstände, Verlauf, Alarmzustand und Aufträge samt Ausgabe, atomar in einer Transaktion.
+// Gibt es nichts, ist das kein Fehler. Auch noch offene Aufträge werden gelöscht; ein späteres Ergebnis des Agenten läuft dann ins Leere.
+// Neue Tabellen mit Site-Bezug müssen hier ergänzt werden (TestDeleteSite prüft die bestehenden).
 func (s *SQLite) DeleteSite(siteID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

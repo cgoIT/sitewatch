@@ -70,6 +70,24 @@ func TestCheckAlertsOnTransitionsOnly(t *testing.T) {
 	}
 }
 
+// Wird eine Site gelöscht und später gleichnamig neu angelegt, muss ihr erster kritischer Zustand wieder alarmieren.
+func TestDeletedSiteIsForgotten(t *testing.T) {
+	now := time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC)
+	st := &fakeStore{entries: []store.Entry{{Report: report.Report{Site: report.Site{ID: "a", Name: "A"}}, ReceivedAt: now.Add(-time.Hour)}}}
+	var sent []string
+	w := &Watcher{Store: st, Config: status.DefaultConfig(), Now: func() time.Time { return now },
+		Send: func(subject, _ string) error { sent = append(sent, subject); return nil }}
+	w.Check()
+	entries := st.entries
+	st.entries = nil // Site gelöscht
+	w.Check()
+	st.entries = entries // gleichnamig neu, sofort kritisch
+	w.Check()
+	if len(sent) != 2 {
+		t.Fatalf("erwartet zwei Alarme, bekam %q", sent)
+	}
+}
+
 func TestHeaderStripsNewlines(t *testing.T) {
 	if got := header("a\r\nBcc: x@evil"); strings.ContainsAny(got, "\r\n") {
 		t.Fatalf("Zeilenumbruch im Header: %q", got)

@@ -253,6 +253,12 @@ func TestDeleteSite(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	if ok, err := s.StartJob("j-a", t0); !ok || err != nil {
+		t.Fatalf("Start: %v %v", ok, err)
+	}
+	if _, err := s.AppendChunks("j-a", []Chunk{{1, "ausgabe\n"}}); err != nil {
+		t.Fatal(err)
+	}
 	if err := s.DeleteSite("a"); err != nil {
 		t.Fatal(err)
 	}
@@ -264,6 +270,15 @@ func TestDeleteSite(t *testing.T) {
 	}
 	if _, ok, _ := s.GetJob("j-a"); ok {
 		t.Error("Auftrag von a noch da")
+	}
+	if as, _ := s.AlertState(); as["a"] || !as["b"] {
+		t.Errorf("Alarmzustand: %v", as)
+	}
+	if d, _ := s.Days("a"); len(d) != 0 {
+		t.Error("Tagesstände von a noch da")
+	}
+	if c, _ := s.Chunks("j-a", 0); len(c) != 0 {
+		t.Error("Ausgabe von a noch da")
 	}
 	if _, ok, _ := s.Get("b"); !ok {
 		t.Error("Report von b wurde mitgelöscht")
