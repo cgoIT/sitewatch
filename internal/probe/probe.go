@@ -31,6 +31,16 @@ const (
 	pingMinSpace = 15 * time.Minute // so selten höchstens, auch wenn der Report überfällig bleibt
 )
 
+// Info ist das Ergebnis der jüngsten Prüfungen einer Site, für die Anzeige. Zeitstempel null = noch nicht vorgekommen.
+type Info struct {
+	PingAt      time.Time
+	PingCode    int    // HTTP-Status des Weckrufs
+	PingErr     string // leer = Antwort erhalten
+	CertAt      time.Time
+	CertErr     string // leer = Zertifikat gelesen
+	CertExpires time.Time
+}
+
 // Prober führt die Prüfungen aus und merkt sich das Ablaufdatum der Zertifikate (im Arbeitsspeicher; nach einem Neustart
 // wird es mit dem ersten Durchlauf neu ermittelt).
 type Prober struct {
@@ -47,6 +57,7 @@ type Prober struct {
 	checked  map[string]time.Time // Site-ID → letzte Zertifikatsprüfung
 	lastPing map[string]time.Time
 	urls     map[string]string // Site-ID → Adresse, für die expires gilt
+	info     map[string]Info
 }
 
 // blocked sind Bereiche, die IsPrivate, IsLoopback und Co. nicht abdecken, aber nicht öffentlich erreichbar sind oder interne
@@ -147,6 +158,26 @@ func (p *Prober) Ping(ctx context.Context, raw string) (int, error) {
 	return resp.StatusCode, nil
 }
 
+// Info liefert die jüngsten Prüfergebnisse; ok ist false, wenn die Site nicht (mehr) geprüft wird.
+func (p *Prober) Info(id string) (Info, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	i, ok := p.info[id]
+	return i, ok
+}
+
+// update ändert die Prüfergebnisse einer Site.
+func (p *Prober) update(id string, f func(*Info)) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.info == nil {
+		p.info = map[string]Info{}
+	}
+	i := p.info[id]
+	f(&i)
+	p.info[id] = i
+}
+
 // Overlay trägt das ermittelte Zertifikat-Ablaufdatum in einen Report ein, der keins enthält (das Bundle kennt es nicht).
 func (p *Prober) Overlay(r *report.Report) {
 	if r.Site.TLSExpires != nil {
@@ -180,6 +211,7 @@ func (p *Prober) Once(ctx context.Context) {
 			continue // http-Adressen werden weder geprüft noch aufgerufen
 		}
 		active[id] = true
+		p.update(id, func(*Info) {}) // wird geprüft, auch wenn noch nichts vorliegt
 		p.checkCert(ctx, id, raw, now)
 		p.wake(ctx, id, raw, a.Updated, now)
 	}
@@ -201,6 +233,11 @@ func (p *Prober) forgetExcept(active map[string]bool) {
 			delete(p.urls, id)
 		}
 	}
+	for id := range p.info {
+		if !active[id] {
+			delete(p.info, id)
+		}
+	}
 }
 
 func (p *Prober) checkCert(ctx context.Context, id, raw string, now time.Time) {
@@ -212,6 +249,7 @@ func (p *Prober) checkCert(ctx context.Context, id, raw string, now time.Time) {
 		p.urls[id] = raw
 		delete(p.expires, id)
 		delete(p.checked, id)
+		delete(p.info, id)
 	}
 	due := now.Sub(p.checked[id]) >= tlsEvery
 	if due {
@@ -230,8 +268,10 @@ func (p *Prober) checkCert(ctx context.Context, id, raw string, now time.Time) {
 		p.mu.Lock()
 		delete(p.expires, id) // lieber unbekannt als ein veralteter Wert
 		p.mu.Unlock()
+		p.update(id, func(i *Info) { i.CertAt, i.CertErr, i.CertExpires = now, err.Error(), time.Time{} })
 		return
 	}
+	p.update(id, func(i *Info) { i.CertAt, i.CertErr, i.CertExpires = now, "", t })
 	p.mu.Lock()
 	if p.expires == nil {
 		p.expires = map[string]time.Time{}
@@ -264,8 +304,10 @@ func (p *Prober) wake(ctx context.Context, id, raw string, created, now time.Tim
 	code, err := p.Ping(ctx, raw)
 	if err != nil {
 		log.Printf("probe: Weckruf an %q: %v", id, err)
+		p.update(id, func(i *Info) { i.PingAt, i.PingCode, i.PingErr = now, 0, err.Error() })
 		return
 	}
+	p.update(id, func(i *Info) { i.PingAt, i.PingCode, i.PingErr = now, code, "" })
 	log.Printf("probe: Weckruf an %q (Report seit %s überfällig): HTTP %d", id, status.Duration(now.Sub(last)), code)
 }
 

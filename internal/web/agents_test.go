@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"sitewatch/internal/probe"
 	"sitewatch/internal/report"
 	"sitewatch/internal/sign"
 	"sitewatch/internal/status"
@@ -358,5 +359,32 @@ func TestLessFold(t *testing.T) {
 	sort.SliceStable(names, func(i, j int) bool { return lessFold(names[i], names[j]) })
 	if got := strings.Join(names, " "); got != "Alpha alpha Beta beta Zeta" {
 		t.Errorf("Reihenfolge: %s", got)
+	}
+}
+
+type fakeProbe map[string]probe.Info
+
+func (f fakeProbe) Info(id string) (probe.Info, bool) { i, ok := f[id]; return i, ok }
+
+func TestProbeLines(t *testing.T) {
+	srv, _ := setupAgents(t)
+	if _, err := srv.Agents.CreateBundle("kunde-b", "B", "https://b.example", srv.Now()); err != nil {
+		t.Fatal(err)
+	}
+	page := func() string { return html.UnescapeString(do(srv, "GET", "/agents/kunde-b", nil, nil).Body.String()) }
+	if !strings.Contains(page(), "Noch nicht geprüft") {
+		t.Error("ohne Prober fehlt der Hinweis")
+	}
+	now := srv.Now()
+	srv.Probe = fakeProbe{"kunde-b": {PingAt: now.Add(-12 * time.Minute), PingCode: 200, CertAt: now.Add(-time.Hour), CertExpires: time.Date(2027, 1, 12, 0, 0, 0, 0, time.UTC)}}
+	b := page()
+	for _, want := range []string{"Weckruf vor 12", "HTTP 200", "Zertifikat läuft am 12.01.2027 ab"} {
+		if !strings.Contains(b, want) {
+			t.Errorf("Seite ohne %q: %s", want, b)
+		}
+	}
+	srv.Probe = fakeProbe{"kunde-b": {PingAt: now.Add(-time.Minute), PingErr: "timeout", CertAt: now, CertErr: "kein Zertifikat"}}
+	if b := page(); !strings.Contains(b, "fehlgeschlagen: timeout") || !strings.Contains(b, "Zertifikatsprüfung gerade eben fehlgeschlagen") {
+		t.Errorf("Fehler nicht angezeigt: %s", b)
 	}
 }

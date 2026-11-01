@@ -74,6 +74,7 @@
       </tbody></table></div></section>
   </div>
 </div>
+{{if .ProbeLines}}<section class="card"><h2>Prüfungen von Sitewatch</h2><div class="pad"><ul class="reasons" style="margin:0">{{range .ProbeLines}}<li>{{.}}</li>{{end}}</ul></div></section>{{end}}
 {{if .Orphan}}<section class="card"><h2>Verwaiste Site</h2><div class="pad">
   <p class="muted" style="margin-top:0">Kein Agent meldet diese Site mehr. Entfernen löscht alle gespeicherten Reports, den Verlauf und die Aufträge dieser Site unwiderruflich.</p>
   <form method="post" action="/sites/{{.R.Site.ID}}/delete"><label class="chk"><input type="checkbox" name="confirm" value="1" required> Entfernen bestätigen</label> <button class="btn danger" type="submit">Site mit allen Daten entfernen</button></form>

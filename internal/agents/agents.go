@@ -40,12 +40,8 @@ type Store struct {
 	mu sync.Mutex
 }
 
-// Open legt die Tabelle bei Bedarf an. db kommt von store.SQLite.DB().
-func Open(db *sql.DB) (*Store, error) {
-	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS agents(
-  id TEXT PRIMARY KEY, type TEXT NOT NULL DEFAULT '', token_hash TEXT NOT NULL, config TEXT NOT NULL, updated TEXT NOT NULL)`)
-	return &Store{db: db}, err
-}
+// Open liefert den Speicher auf der Datenbank von store.SQLite.DB(); die Tabelle legt store an (Schema und Migrationen).
+func Open(db *sql.DB) (*Store, error) { return &Store{db: db}, nil }
 
 var ErrNotFound = errors.New("Agent nicht gefunden")
 

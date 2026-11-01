@@ -39,7 +39,50 @@ CREATE TABLE IF NOT EXISTS jobs(
   approved_by TEXT NOT NULL, created_ns INTEGER NOT NULL, expires_ns INTEGER NOT NULL, started_ns INTEGER, finished_ns INTEGER, exit_code INTEGER,
   envelope TEXT NOT NULL, cancel INTEGER NOT NULL DEFAULT 0, out_bytes INTEGER NOT NULL DEFAULT 0, truncated INTEGER NOT NULL DEFAULT 0);
 CREATE INDEX IF NOT EXISTS jobs_agent ON jobs(agent, status);
-CREATE TABLE IF NOT EXISTS job_chunks(job_id TEXT NOT NULL, seq INTEGER NOT NULL, data TEXT NOT NULL, PRIMARY KEY(job_id, seq));`
+CREATE TABLE IF NOT EXISTS job_chunks(job_id TEXT NOT NULL, seq INTEGER NOT NULL, data TEXT NOT NULL, PRIMARY KEY(job_id, seq));
+CREATE TABLE IF NOT EXISTS agents(
+  id TEXT PRIMARY KEY, type TEXT NOT NULL DEFAULT '', token_hash TEXT NOT NULL, config TEXT NOT NULL, updated TEXT NOT NULL);`
+
+// baseVersion ist die Schemaversion, die schema beschreibt (PRAGMA user_version). schema bleibt dieser Ausgangsstand und wird nie geändert;
+// jede spätere Änderung ist ein Eintrag in migrations. Eine Datenbank ohne Version (user_version 0) ist eine, die vor der Versionierung
+// angelegt wurde und genau diesem Stand entspricht.
+const baseVersion = 1
+
+// migrations: Eintrag i hebt die Datenbank von Version baseVersion+i auf baseVersion+i+1. Jeder läuft in einer eigenen Transaktion
+// zusammen mit dem Setzen der Version, ein Fehler lässt die Datenbank unverändert.
+var migrations []func(tx *sql.Tx) error
+
+// migrate bringt die Datenbank auf die aktuelle Version. Eine neuere Datenbank (Programm zurückgerollt) wird nicht angefasst.
+func migrate(db *sql.DB) error {
+	var v int
+	if err := db.QueryRow(`PRAGMA user_version`).Scan(&v); err != nil {
+		return err
+	}
+	want := baseVersion + len(migrations)
+	if v > want {
+		return fmt.Errorf("die Datenbank hat Schemaversion %d, dieses Programm kennt nur %d; bitte Sitewatch aktualisieren", v, want)
+	}
+	v = max(v, baseVersion)
+	for ; v < want; v++ {
+		tx, err := db.Begin()
+		if err != nil {
+			return err
+		}
+		if err := migrations[v-baseVersion](tx); err != nil {
+			tx.Rollback()
+			return fmt.Errorf("Migration auf Version %d: %w", v+1, err)
+		}
+		if _, err := tx.Exec(fmt.Sprintf(`PRAGMA user_version = %d`, v+1)); err != nil {
+			tx.Rollback()
+			return err
+		}
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+	}
+	_, err := db.Exec(fmt.Sprintf(`PRAGMA user_version = %d`, want)) // setzt auch eine unversionierte Datenbank auf Version 1
+	return err
+}
 
 // OpenSQLite öffnet (und legt bei Bedarf an) die Datenbank. Die Datei ist nur für den Besitzer lesbar.
 func OpenSQLite(path string, ret Retention) (*SQLite, error) {
@@ -60,6 +103,10 @@ func OpenSQLite(path string, ret Retention) (*SQLite, error) {
 	}
 	db.SetMaxOpenConns(1)
 	if _, err := db.Exec(schema); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := migrate(db); err != nil {
 		db.Close()
 		return nil, err
 	}

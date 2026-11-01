@@ -1,9 +1,11 @@
 package store
 
 import (
+	"database/sql"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -288,5 +290,58 @@ func TestDeleteSite(t *testing.T) {
 	}
 	if err := s.DeleteSite("gibt-es-nicht"); err != nil {
 		t.Errorf("unbekannte Site: %v", err)
+	}
+}
+
+func TestMigrate(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "m.db")
+	version := func(s *SQLite) int {
+		var v int
+		if err := s.db.QueryRow(`PRAGMA user_version`).Scan(&v); err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	s, err := OpenSQLite(path, DefaultRetention())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v := version(s); v != baseVersion {
+		t.Fatalf("neue Datenbank: Version %d", v)
+	}
+	s.db.Exec(`PRAGMA user_version = 0`) // Datenbank aus der Zeit vor der Versionierung
+	s.Close()
+
+	old := migrations
+	t.Cleanup(func() { migrations = old })
+	migrations = []func(*sql.Tx) error{func(tx *sql.Tx) error { _, err := tx.Exec(`ALTER TABLE alert_state ADD COLUMN note TEXT`); return err }}
+	s, err = OpenSQLite(path, DefaultRetention())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v := version(s); v != baseVersion+1 {
+		t.Errorf("nach der Migration: Version %d", v)
+	}
+	if _, err := s.db.Exec(`UPDATE alert_state SET note='x'`); err != nil {
+		t.Errorf("Migration nicht angewendet: %v", err)
+	}
+	s.Close()
+
+	// Fehlschlag: Datenbank bleibt auf der alten Version, Öffnen scheitert.
+	migrations = append(migrations, func(tx *sql.Tx) error { _, err := tx.Exec(`ALTER TABLE gibt_es_nicht ADD COLUMN x TEXT`); return err })
+	if _, err := OpenSQLite(path, DefaultRetention()); err == nil {
+		t.Fatal("fehlerhafte Migration ohne Fehler")
+	}
+	migrations = migrations[:1]
+	s, err = OpenSQLite(path, DefaultRetention())
+	if err != nil {
+		t.Fatalf("Version nach Fehlschlag verändert: %v", err)
+	}
+	s.Close()
+
+	// Neuere Datenbank: wird abgelehnt statt beschädigt.
+	migrations = nil
+	if _, err := OpenSQLite(path, DefaultRetention()); err == nil || !strings.Contains(err.Error(), "aktualisieren") {
+		t.Errorf("neuere Datenbank: %v", err)
 	}
 }

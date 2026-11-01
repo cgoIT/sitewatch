@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"sitewatch/internal/agents"
+	"sitewatch/internal/probe"
 	"sitewatch/internal/report"
 	"sitewatch/internal/status"
 	"sitewatch/internal/store"
@@ -32,7 +33,11 @@ type Server struct {
 	Settings     *status.Settings
 	SaveSettings func(cfg status.Config, vals map[string]int) error
 	settingsMu   sync.Mutex
-	Now          func() time.Time
+	// Probe (optional) liefert die Ergebnisse von Weckruf und Zertifikatsprüfung für die Anzeige.
+	Probe interface {
+		Info(siteID string) (probe.Info, bool)
+	}
+	Now func() time.Time
 	// Protect schützt die Oberfläche (Login). nil = offen; die Agent-API ist nie betroffen.
 	Protect func(http.Handler) http.Handler
 	// Agents und SignKey schalten die Fernkonfiguration der Agenten ein (Config-API und Seiten unter /agents); nil = aus.
@@ -414,6 +419,7 @@ func (s *Server) detail(w http.ResponseWriter, r *http.Request) {
 		"Day":  day, "DayLabel": dayLabel(day), "Days": dayOptions(days, day),
 		"Maintenance": maintenanceLabel(rep.Site.MaintenanceMode, rep.Site.MaintenanceSince),
 		"Orphan":      s.orphan(id),
+		"ProbeLines":  s.probeLines(id),
 	})
 }
 

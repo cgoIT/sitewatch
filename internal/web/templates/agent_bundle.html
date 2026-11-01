@@ -9,8 +9,13 @@
 <section class="card"><h2>Site</h2><div class="pad">
   <form method="post" action="/agents/{{.Agent.ID}}" class="inline"><div class="fgrid">
     <label class="f">Anzeigename<input name="name" value="{{.Site.Name}}"></label>
-    <label class="f">URL der Seite (nur zur Anzeige)<input name="site_url" value="{{.Site.URL}}"></label>
+    <label class="f">URL der Seite (https: Sitewatch prüft das Zertifikat und weckt die Seite bei überfälligem Report)<input name="site_url" value="{{.Site.URL}}"></label>
   </div><p><button class="btn primary" type="submit">Speichern</button></p></form>
+</div></section>
+<section class="card"><h2>Prüfungen von Sitewatch</h2><div class="pad">
+  {{if .ProbeLines}}<ul class="reasons" style="margin:0">{{range .ProbeLines}}<li>{{.}}</li>{{end}}</ul>
+  {{else if .Site.URL}}<p class="muted" style="margin:0">Noch nicht geprüft (nur https-Adressen; ein Durchlauf alle 5 Minuten).</p>
+  {{else}}<p class="muted" style="margin:0">Ohne URL gibt es weder Weckruf noch Zertifikatsprüfung.</p>{{end}}
 </div></section>
 <section class="card"><h2>Block für <span class="mono">config/config.yaml</span></h2><div class="pad">
   <pre class="code">{{.Snippet}}</pre>

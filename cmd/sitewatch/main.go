@@ -170,6 +170,7 @@ func serve(args []string) {
 	}
 	srv := web.New(seen, cfg)
 	srv.Settings = settings
+	srv.Probe = prober
 	srv.SaveSettings = func(c status.Config, vals map[string]int) error {
 		if len(vals) == 0 {
 			if err := st.DeleteSetting(thresholdsKey); err != nil {

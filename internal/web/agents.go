@@ -276,7 +276,7 @@ func (s *Server) bundlePage(w http.ResponseWriter, r *http.Request, a agents.Age
 	st := a.Config.Sites[0]
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(code)
-	s.render(w, "agent_bundle.html", map[string]any{"Agent": a, "Site": st, "Error": msg,
+	s.render(w, "agent_bundle.html", map[string]any{"Agent": a, "Site": st, "Error": msg, "ProbeLines": s.probeLines(st.ID),
 		"Snippet": bundleSnippet(s.baseURL(r), "TOKEN-DES-AGENTEN", st)})
 }
 
@@ -404,4 +404,35 @@ func (s *Server) agentErr(w http.ResponseWriter, r *http.Request, err error) boo
 		http.Error(w, "interner Fehler", http.StatusInternalServerError)
 	}
 	return true
+}
+
+// probeLines beschreibt, was Sitewatch zuletzt an der Seite geprüft hat (Weckruf, Zertifikat); leer, wenn nichts geprüft wird.
+func (s *Server) probeLines(siteID string) []string {
+	if s.Probe == nil {
+		return nil
+	}
+	i, ok := s.Probe.Info(siteID)
+	if !ok {
+		return nil
+	}
+	now := s.Now()
+	ago := func(t time.Time) string { return status.Ago(now.Sub(t)) } // enthält schon „vor“
+	var out []string
+	switch {
+	case i.PingAt.IsZero():
+		out = append(out, "Weckruf: bisher nicht nötig (Report aktuell)")
+	case i.PingErr != "":
+		out = append(out, "Weckruf "+ago(i.PingAt)+" fehlgeschlagen: "+i.PingErr)
+	default:
+		out = append(out, fmt.Sprintf("Weckruf %s: HTTP %d", ago(i.PingAt), i.PingCode))
+	}
+	switch {
+	case i.CertAt.IsZero():
+		out = append(out, "Zertifikat: noch nicht geprüft")
+	case i.CertErr != "":
+		out = append(out, "Zertifikatsprüfung "+ago(i.CertAt)+" fehlgeschlagen: "+i.CertErr)
+	default:
+		out = append(out, fmt.Sprintf("Zertifikat läuft am %s ab (geprüft %s)", i.CertExpires.Format("02.01.2006"), ago(i.CertAt)))
+	}
+	return out
 }
