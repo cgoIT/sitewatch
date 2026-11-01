@@ -3,7 +3,9 @@
 package agents
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -149,7 +151,7 @@ func (s *Store) Import(in []Agent) error {
 		if a.Updated.IsZero() {
 			return fmt.Errorf("Agent %q: Änderungszeit fehlt", a.ID)
 		}
-		if len(a.TokenHash) != 64 || strings.Trim(a.TokenHash, "0123456789abcdef") != "" {
+		if b, err := hex.DecodeString(a.TokenHash); err != nil || len(b) != sha256.Size || a.TokenHash != hex.EncodeToString(b) { // genau auth.Hash: 64 Zeichen, klein
 			return fmt.Errorf("Agent %q: ungültiger Token-Hash", a.ID)
 		}
 		switch {
