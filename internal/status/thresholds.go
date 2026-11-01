@@ -138,14 +138,17 @@ type Settings struct {
 	cfg Config
 }
 
+// NewSettings legt die Schwellwerte mit dem Startwert c an.
 func NewSettings(c Config) *Settings { return &Settings{cfg: c} }
 
+// Get liefert eine Kopie der aktuellen Schwellwerte; sie ist ohne Sperre weiterverwendbar.
 func (s *Settings) Get() Config {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.cfg
 }
 
+// Set ersetzt die Schwellwerte; der Aufrufer hat sie vorher mit Config.With geprüft.
 func (s *Settings) Set(c Config) {
 	s.mu.Lock()
 	s.cfg = c

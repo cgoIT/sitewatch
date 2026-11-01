@@ -34,6 +34,8 @@ type Identity struct {
 	Groups         []string
 }
 
+// Login führt den OIDC-Login (Authorization Code Flow mit PKCE) durch und prüft den ID-Token.
+// Erst nach erfolgreicher Prüfung wird OnSuccess aufgerufen.
 type Login struct {
 	oauth    oauth2.Config
 	verifier *oidc.IDTokenVerifier

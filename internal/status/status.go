@@ -10,6 +10,7 @@ import (
 	"sitewatch/internal/store"
 )
 
+// Level ist die Schwere eines Befunds; höhere Werte sind schlimmer, damit das Maximum der Gesamtstatus ist.
 type Level int
 
 const (
@@ -18,6 +19,7 @@ const (
 	Crit
 )
 
+// String liefert den Namen für Oberfläche und CSS: "ok", "warn" oder "crit".
 func (l Level) String() string {
 	switch l {
 	case Warn:
@@ -50,6 +52,7 @@ type Config struct {
 	EOL             EOLSource       // optional: aktuelle Support-Enden (z. B. endoflife.date); nil = nur die eingebaute PHP-Tabelle
 }
 
+// DefaultConfig liefert die Standardwerte aller Schwellwerte. Im Betrieb kommen Abweichungen aus der Datenbank (Seite „Einstellungen“).
 func DefaultConfig() Config {
 	return Config{StaleAfter: 15 * time.Minute, BundleStaleAfter: 3 * time.Hour, BundlePingAfter: 90 * time.Minute, ErrorWarn: 10, EOLWarn: 90 * 24 * time.Hour,
 		TLSWarn: 14 * 24 * time.Hour, BackupMax: 36 * time.Hour, DiskWarn: 15, DiskCrit: 5, CronWarn: 2 * time.Hour, CronCrit: 4 * time.Hour, MaintWarn: 2 * time.Hour, MaintCrit: 8 * time.Hour,
@@ -176,6 +179,7 @@ func EOLLevel(product, version string, now time.Time, cfg Config) (Level, time.T
 	return OK, eol
 }
 
+// TLSLevel bewertet das Ablaufdatum eines Zertifikats: Crit, wenn es abgelaufen ist, Warn unter cfg.TLSWarn Restlaufzeit.
 func TLSLevel(expires, now time.Time, cfg Config) Level {
 	switch {
 	case expires.Before(now):
@@ -186,6 +190,7 @@ func TLSLevel(expires, now time.Time, cfg Config) Level {
 	return OK
 }
 
+// BackupLevel gibt Warn, wenn das letzte Backup länger her ist als cfg.BackupMax.
 func BackupLevel(last, now time.Time, cfg Config) Level {
 	if now.Sub(last) > cfg.BackupMax {
 		return Warn
@@ -193,6 +198,7 @@ func BackupLevel(last, now time.Time, cfg Config) Level {
 	return OK
 }
 
+// MaintenanceLevel bewertet, wie lange der Wartungsmodus schon an ist (Warn ab cfg.MaintWarn, Crit ab cfg.MaintCrit).
 func MaintenanceLevel(since, now time.Time, cfg Config) Level {
 	switch age := now.Sub(since); {
 	case age > cfg.MaintCrit:
@@ -203,6 +209,7 @@ func MaintenanceLevel(since, now time.Time, cfg Config) Level {
 	return OK
 }
 
+// CronLevel bewertet das Alter des letzten Contao-Cron-Laufs (Warn ab cfg.CronWarn, Crit ab cfg.CronCrit).
 func CronLevel(last, now time.Time, cfg Config) Level {
 	switch age := now.Sub(last); {
 	case age > cfg.CronCrit:

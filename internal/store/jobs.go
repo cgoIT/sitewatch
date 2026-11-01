@@ -96,6 +96,7 @@ func scanJob(sc interface{ Scan(...any) error }) (Job, error) {
 	return j, nil
 }
 
+// CreateJob legt einen Auftrag an. Je Site darf nur einer offen sein (wartend oder laufend), sonst gibt es einen Fehler.
 func (s *SQLite) CreateJob(j Job) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -112,6 +113,7 @@ func (s *SQLite) CreateJob(j Job) error {
 	return err
 }
 
+// GetJob liefert den Auftrag; ok ist false, wenn es ihn nicht gibt.
 func (s *SQLite) GetJob(id string) (Job, bool, error) {
 	j, err := scanJob(s.db.QueryRow(`SELECT `+jobCols+` FROM jobs WHERE id=?`, id))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -120,6 +122,7 @@ func (s *SQLite) GetJob(id string) (Job, bool, error) {
 	return j, err == nil, err
 }
 
+// ListJobs liefert die jüngsten Aufträge, neueste zuerst.
 func (s *SQLite) ListJobs(limit int) ([]Job, error) {
 	rows, err := s.db.Query(`SELECT `+jobCols+` FROM jobs ORDER BY created_ns DESC LIMIT ?`, limit)
 	if err != nil {
@@ -137,6 +140,8 @@ func (s *SQLite) ListJobs(limit int) ([]Job, error) {
 	return out, rows.Err()
 }
 
+// NextJob liefert dem Agenten seinen ältesten ausführbaren Auftrag (wartend und nicht abgelaufen, nicht abgebrochen).
+// Ein gerade gestarteter ohne Ausgabe wird noch einmal geliefert, falls die Antwort auf „läuft“ verloren ging.
 func (s *SQLite) NextJob(agent string, now time.Time) (Job, bool, error) {
 	// Ein "laufender" Auftrag ohne Ausgabe, dessen Start kürzlich war, kommt noch einmal: Die Antwort auf "running" kann verloren gegangen
 	// sein, dann hat der Agent nichts ausgeführt. Hat er ihn doch gestartet, lehnt er die zweite Lieferung ab (ID schon gesehen) und der Auftrag endet.
@@ -149,6 +154,8 @@ func (s *SQLite) NextJob(agent string, now time.Time) (Job, bool, error) {
 	return j, err == nil, err
 }
 
+// StartJob setzt einen wartenden, nicht abgelaufenen und nicht abgebrochenen Auftrag auf „läuft“. Auch ein schon laufender (Wiederholung
+// nach verlorener Antwort) gilt als gestartet. ok ist false, wenn der Agent ihn nicht ausführen darf.
 func (s *SQLite) StartJob(id string, now time.Time) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -165,6 +172,8 @@ func (s *SQLite) StartJob(id string, now time.Time) (bool, error) {
 	return n == 1, err
 }
 
+// AppendChunks hängt Ausgabeblöcke an (doppelte Folgenummern werden ignoriert, über MaxJobOutput hinaus wird abgeschnitten).
+// Der Rückgabewert sagt dem Agenten, ob er abbrechen soll: der Auftrag wurde abgebrochen oder läuft nicht (mehr).
 func (s *SQLite) AppendChunks(id string, chunks []Chunk) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -203,6 +212,7 @@ func (s *SQLite) AppendChunks(id string, chunks []Chunk) (bool, error) {
 	return cancel == 1, tx.Commit()
 }
 
+// FinishJob beendet einen wartenden oder laufenden Auftrag mit Status, Meldung und optionalem Exit-Code; ein bereits beendeter bleibt unverändert.
 func (s *SQLite) FinishJob(id, status, message string, exit *int, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -211,6 +221,7 @@ func (s *SQLite) FinishJob(id, status, message string, exit *int, now time.Time)
 	return err
 }
 
+// CancelJob bricht einen noch wartenden Auftrag ab; ein laufender lässt sich nicht abbrechen.
 func (s *SQLite) CancelJob(id string, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -234,6 +245,7 @@ func (s *SQLite) CancelJob(id string, now time.Time) error {
 	return err
 }
 
+// Chunks liefert die Ausgabeblöcke mit Folgenummer nach after, in Reihenfolge.
 func (s *SQLite) Chunks(id string, after int) ([]Chunk, error) {
 	rows, err := s.db.Query(`SELECT seq, data FROM job_chunks WHERE job_id=? AND seq>? ORDER BY seq`, id, after)
 	if err != nil {

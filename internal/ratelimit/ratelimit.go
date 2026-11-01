@@ -29,6 +29,7 @@ type bucket struct {
 	last   time.Time
 }
 
+// New liefert einen Limiter, der je Adresse burst Anfragen sofort erlaubt und danach eine alle every.
 func New(burst int, every time.Duration) *Limiter {
 	return &Limiter{burst: burst, every: every, Now: time.Now, b: map[netip.Addr]bucket{}, maxKeys: 100000}
 }

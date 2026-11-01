@@ -60,6 +60,7 @@ type Retention struct {
 	ReportDays  int // vollständige Tagesstände; der jüngste je Site bleibt immer
 }
 
+// DefaultRetention liefert die Standard-Aufbewahrung: 30 Tage jeder Punkt, 90 Tage alle sechs Stunden, 365 Tage je Tag; Reports 90 Tage.
 func DefaultRetention() Retention {
 	return Retention{FullDays: 30, SixHourDays: 90, MaxDays: 365, ReportDays: 90}
 }

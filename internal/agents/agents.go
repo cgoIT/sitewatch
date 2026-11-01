@@ -20,6 +20,8 @@ import (
 	"sitewatch/internal/report"
 )
 
+// Agent ist ein Absender von Reports mit eigenem Token. Ein Server-Agent (Type leer) holt seine Konfiguration von Sitewatch
+// und kann mehrere Sites melden, ein Contao-Bundle genau eine. Das Token steht nie im Klartext hier, nur sein SHA-256-Hash.
 type Agent struct {
 	ID string `json:"id"`
 	// Type: leer = Go-Agent auf einem Server; report.AgentContaoBundle = Contao-Bundle mit genau einer Site (Site-ID = Agent-ID), das ohne Abruf von Konfiguration meldet.
@@ -190,6 +192,7 @@ func (s *Store) List() ([]Agent, error) {
 	return as, err
 }
 
+// Get liefert den Agenten mit der ID oder ErrNotFound.
 func (s *Store) Get(id string) (Agent, error) {
 	as, err := s.List()
 	for _, a := range as {
@@ -346,6 +349,7 @@ func (s *Store) Rotate(id string) (string, error) {
 	return "", ErrNotFound
 }
 
+// Delete entfernt den Agenten samt Token; seine Reports bleiben erhalten. Gibt es ihn nicht, ist das ErrNotFound.
 func (s *Store) Delete(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

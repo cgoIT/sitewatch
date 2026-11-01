@@ -285,12 +285,14 @@ func actionLabel(name string) string {
 	return name
 }
 
+// siteChoice ist eine Site in der Auswahl für einen neuen Auftrag.
 type siteChoice struct {
 	ID, Label, Agent, Kind string
 	// Die Aktionen, die der Agent gerade angemeldet hat und die zur Art der Site passen, nach Stufe getrennt.
 	Read, Change, Critical []jobs.Action
 }
 
+// Has sagt, ob die Aktion für die Site angeboten wird (in irgendeiner Stufe).
 func (c siteChoice) Has(action string) bool {
 	for _, l := range [][]jobs.Action{c.Read, c.Change, c.Critical} {
 		if slices.ContainsFunc(l, func(a jobs.Action) bool { return a.Name == action }) {
@@ -300,6 +302,7 @@ func (c siteChoice) Has(action string) bool {
 	return false
 }
 
+// Any sagt, ob für die Site überhaupt eine Aktion angeboten wird.
 func (c siteChoice) Any() bool { return len(c.Read)+len(c.Change)+len(c.Critical) > 0 }
 
 // contaoSites: die Sites, für die Aufträge möglich sind (Contao oder PHP, einem Agenten zugewiesen).

@@ -237,6 +237,7 @@ type Store struct {
 	P *Prober
 }
 
+// Latest wie store.Store.Latest, mit ergänztem Zertifikat-Ablauf.
 func (s Store) Latest() ([]store.Entry, error) {
 	es, err := s.Store.Latest()
 	for i := range es {
@@ -245,6 +246,7 @@ func (s Store) Latest() ([]store.Entry, error) {
 	return es, err
 }
 
+// Get wie store.Store.Get, mit ergänztem Zertifikat-Ablauf.
 func (s Store) Get(id string) (store.Entry, bool, error) {
 	e, ok, err := s.Store.Get(id)
 	if ok {

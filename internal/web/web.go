@@ -60,6 +60,7 @@ type Server struct {
 	fetched map[string]time.Time // wann der Agent die Konfiguration zuletzt abgeholt hat (nur im Speicher)
 }
 
+// New baut den Server; Agents, SignKey, Protect und weitere Felder setzt der Aufrufer danach, bevor er Handler aufruft.
 func New(s store.Store, cfg status.Config) *Server {
 	srv := &Server{Store: s, Settings: status.NewSettings(cfg), Now: time.Now}
 	srv.SaveSettings = func(c status.Config, _ map[string]int) error { srv.Settings.Set(c); return nil } // ohne Speicher nur im Arbeitsspeicher
@@ -76,6 +77,7 @@ func New(s store.Store, cfg status.Config) *Server {
 	return srv
 }
 
+// Handler liefert die Routen: Oberfläche (hinter Protect und Same-Origin-Prüfung) und die Agent-API (Bearer-Token).
 func (s *Server) Handler() http.Handler {
 	ui := http.NewServeMux()
 	ui.HandleFunc("GET /{$}", s.overview)
@@ -314,6 +316,7 @@ func filterFrom(r *http.Request) filter {
 	return f
 }
 
+// Active sagt, ob irgendein Filter gesetzt ist.
 func (f filter) Active() bool { return f.Q != "" || f.Status != "" || f.Kind != "" }
 
 func (f filter) apply(rows []row) []row {

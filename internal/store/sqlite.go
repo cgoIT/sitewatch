@@ -66,6 +66,7 @@ func OpenSQLite(path string, ret Retention) (*SQLite, error) {
 	return &SQLite{db: db, ret: ret}, nil
 }
 
+// Close schließt die Datenbank.
 func (s *SQLite) Close() error { return s.db.Close() }
 
 // Setting liest eine Einstellung des Cockpits (Tabelle meta, Schlüssel mit Präfix); ok=false: nicht gesetzt.
@@ -83,6 +84,7 @@ func (s *SQLite) SetSetting(key, value string) error {
 	return err
 }
 
+// DeleteSetting entfernt eine Einstellung, es gilt dann wieder der Standard.
 func (s *SQLite) DeleteSetting(key string) error {
 	_, err := s.db.Exec(`DELETE FROM meta WHERE key=?`, "setting."+key)
 	return err
@@ -98,6 +100,8 @@ func (s *SQLite) SetRetention(r Retention) {
 // DB liefert die Datenbank für Tabellen anderer Pakete (Agenten); sie nutzen dieselbe einzige Verbindung.
 func (s *SQLite) DB() *sql.DB { return s.db }
 
+// Save speichert den Report als Tagesstand und als Messpunkt. level ist die Bewertung zum Eingang (status.Level als Zahl).
+// Ein älterer, nachgesendeter Report überschreibt den Tagesstand nicht.
 func (s *SQLite) Save(e Entry, level int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -161,6 +165,7 @@ func scanEntry(sc interface{ Scan(...any) error }) (Entry, error) {
 	return e, json.Unmarshal([]byte(data), &e.Report)
 }
 
+// Latest liefert je Site den jüngsten Report, nach Site-ID sortiert.
 func (s *SQLite) Latest() ([]Entry, error) {
 	rows, err := s.db.Query(`SELECT report, received_ns FROM daily_reports d
 		WHERE day = (SELECT MAX(day) FROM daily_reports WHERE site_id = d.site_id) ORDER BY site_id`)
@@ -179,6 +184,7 @@ func (s *SQLite) Latest() ([]Entry, error) {
 	return out, rows.Err()
 }
 
+// Get liefert den jüngsten Report einer Site; ok ist false, wenn sie noch nie gemeldet hat.
 func (s *SQLite) Get(siteID string) (Entry, bool, error) {
 	e, err := scanEntry(s.db.QueryRow(`SELECT report, received_ns FROM daily_reports WHERE site_id=? ORDER BY day DESC LIMIT 1`, siteID))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -187,6 +193,7 @@ func (s *SQLite) Get(siteID string) (Entry, bool, error) {
 	return e, err == nil, err
 }
 
+// GetDay liefert den Tagesstand (letzter Report des Tages, UTC, Format YYYY-MM-DD).
 func (s *SQLite) GetDay(siteID, day string) (Entry, bool, error) {
 	e, err := scanEntry(s.db.QueryRow(`SELECT report, received_ns FROM daily_reports WHERE site_id=? AND day=?`, siteID, day))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -195,6 +202,7 @@ func (s *SQLite) GetDay(siteID, day string) (Entry, bool, error) {
 	return e, err == nil, err
 }
 
+// Days liefert die Tage mit Tagesstand, neueste zuerst.
 func (s *SQLite) Days(siteID string) ([]string, error) {
 	rows, err := s.db.Query(`SELECT day FROM daily_reports WHERE site_id=? ORDER BY day DESC`, siteID)
 	if err != nil {
@@ -228,6 +236,7 @@ func scanSample(sc interface{ Scan(...any) error }, lead ...any) (Sample, error)
 	return sm, nil
 }
 
+// History liefert die Messpunkte einer Site, neueste zuerst; limit <= 0 heißt alle.
 func (s *SQLite) History(siteID string, limit int) ([]Sample, error) {
 	if limit <= 0 {
 		limit = -1 // SQLite: kein Limit
@@ -286,6 +295,7 @@ func (s *SQLite) AlertState() (map[string]bool, error) {
 	return out, rows.Err()
 }
 
+// SetAlerted merkt sich (on) oder vergisst (!on), dass für die Site ein Alarm ausgelöst wurde, damit er nicht bei jeder Prüfung neu kommt.
 func (s *SQLite) SetAlerted(siteID string, on bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
