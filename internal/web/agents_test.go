@@ -297,3 +297,17 @@ func TestUnreportedSiteHasNoLink(t *testing.T) {
 		t.Error("Site mit Meldung hat keinen Link")
 	}
 }
+
+func TestSettingsExport(t *testing.T) {
+	srv, _ := setupAgents(t)
+	if _, err := srv.Agents.CreateBundle("kunde-b", "", "", srv.Now()); err != nil {
+		t.Fatal(err)
+	}
+	w := do(srv, "POST", "/settings/export", url.Values{}, nil)
+	if w.Code != 200 || !strings.Contains(w.Header().Get("Content-Disposition"), "attachment") || !strings.Contains(w.Body.String(), `"id": "kunde-b"`) {
+		t.Fatalf("Export: %d %v %s", w.Code, w.Header(), w.Body.String())
+	}
+	if w := do(srv, "GET", "/settings/export", nil, nil); w.Code == 200 {
+		t.Error("Export darf nicht per GET erreichbar sein")
+	}
+}

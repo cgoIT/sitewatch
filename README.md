@@ -134,6 +134,16 @@ Die meisten Aktionen rufen `<SITE_DIR>/bin/site <befehl>` auf (das Werkzeug des 
 Contao-Konsole. Es gibt keine freie Shell. `bin/site` läuft als Benutzer des Agenten (meist root) und darf deshalb nicht vom
 Web-Benutzer beschreibbar sein.
 
+## Sichern und Umziehen
+
+- **Datensicherung:** Alles liegt in `<data>/sitewatch.db` (SQLite) und `<data>/signing.key`. Die Datenbank sichert man im laufenden Betrieb mit
+  `sqlite3 sitewatch.db "VACUUM INTO '/ziel/sitewatch.db'"`; `signing.key` ist eine Datei (Rechte 0600) und gehört in dieselbe Sicherung.
+- **Konfiguration exportieren:** Unter „Einstellungen“ → „Sicherung“ liefert „Konfiguration exportieren“ eine JSON-Datei mit den Agenten
+  (samt Token-Hash) und den Schwellwerten, ohne Reports und ohne Signierschlüssel. Die Datei ist so schützenswert wie die Datenbank.
+- **Umzug:** Auf dem neuen Server `signing.key` ins Datenverzeichnis legen (sonst lehnen die Agenten neue Konfigurationen ab) und die Datei
+  einmalig einspielen: `sitewatch serve -data … -import sitewatch-2026-11-01.json`. Das geht nur in eine Installation ohne Agenten; eine
+  fehlerhafte Datei wird vollständig abgelehnt. Die Token der Agenten bleiben gültig, eine Änderung an den Agenten ist nicht nötig.
+
 ## Sites in Docker-Containern
 
 Der Agent läuft auf dem **Host**, nicht im Container. Das Webroot ist dort per Bind-Mount lesbar (`composer.lock`, `var/logs`),

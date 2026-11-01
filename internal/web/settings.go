@@ -1,9 +1,11 @@
 package web
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"sitewatch/internal/backup"
 	"strconv"
 	"strings"
 
@@ -14,6 +16,7 @@ func (s *Server) settingsRoutes(ui *http.ServeMux) {
 	ui.HandleFunc("GET /settings", s.settingsShow)
 	ui.HandleFunc("POST /settings", s.settingsSave)
 	ui.HandleFunc("POST /settings/reset", s.settingsReset)
+	ui.HandleFunc("POST /settings/export", s.settingsExport)
 }
 
 type settingField struct {
@@ -80,13 +83,7 @@ func (s *Server) settingsSave(w http.ResponseWriter, r *http.Request) {
 		s.settingsPage(w, err.Error(), entered, false, http.StatusUnprocessableEntity)
 		return
 	}
-	// Gespeichert werden nur die Werte, die vom Standard abweichen; so wirken spätere neue Standardwerte weiter.
-	def, diff := status.DefaultConfig().Values(), map[string]int{}
-	for k, v := range cfg.Values() {
-		if v != def[k] {
-			diff[k] = v
-		}
-	}
+	diff := cfg.Diff()
 	if err := s.SaveSettings(cfg, diff); err != nil {
 		log.Printf("settings: speichern: %v", err)
 		http.Error(w, "interner Fehler", http.StatusInternalServerError)
@@ -108,4 +105,22 @@ func (s *Server) settingsReset(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Print("settings: Schwellwerte auf die Standardwerte zurückgesetzt")
 	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
+}
+
+// settingsExport liefert die Konfiguration (Agenten mit Token-Hash, Schwellwerte) als Download. POST, damit kein Link und kein
+// fremder Seitenaufruf sie auslöst; die Datei ist so schützenswert wie die Datenbank.
+func (s *Server) settingsExport(w http.ResponseWriter, r *http.Request) {
+	f, err := backup.Export(s.Agents, s.cfg(), s.Now())
+	if err != nil {
+		log.Printf("settings: Export: %v", err)
+		http.Error(w, "interner Fehler", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Disposition", `attachment; filename="sitewatch-`+f.ExportedAt.Format("2006-01-02")+`.json"`)
+	w.Header().Set("Cache-Control", "no-store")
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	_ = enc.Encode(f)
+	log.Print("settings: Konfiguration exportiert")
 }

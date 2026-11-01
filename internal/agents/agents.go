@@ -134,6 +134,53 @@ func (s *Store) ImportFile(path string) (int, error) {
 	return n, err
 }
 
+// Import übernimmt Agenten aus einer Sicherung in eine noch leere Tabelle. Alle werden vorab geprüft wie beim Anlegen;
+// bei einem Fehler wird nichts geschrieben.
+func (s *Store) Import(in []Agent) error {
+	seenSite := map[string]string{}
+	seen := map[string]bool{}
+	for _, a := range in {
+		if !report.ValidID(a.ID) || seen[a.ID] {
+			return fmt.Errorf("Agent %q: ungültige oder doppelte ID", a.ID)
+		}
+		seen[a.ID] = true
+		if len(a.TokenHash) != 64 || strings.Trim(a.TokenHash, "0123456789abcdef") != "" {
+			return fmt.Errorf("Agent %q: ungültiger Token-Hash", a.ID)
+		}
+		switch {
+		case a.Type == report.AgentContaoBundle:
+			if len(a.Config.Sites) != 1 || a.Config.Sites[0].ID != a.ID {
+				return fmt.Errorf("Agent %q: ein Contao-Bundle hat genau eine Site mit der ID des Agenten", a.ID)
+			}
+			if err := checkBundle(a.Config.Sites[0].Name, a.Config.Sites[0].URL); err != nil {
+				return fmt.Errorf("Agent %q: %w", a.ID, err)
+			}
+		case a.Type == "":
+			if err := a.Config.Validate(nil); err != nil {
+				return fmt.Errorf("Agent %q: %w", a.ID, err)
+			}
+		default:
+			return fmt.Errorf("Agent %q: unbekannter Typ %q", a.ID, a.Type)
+		}
+		for _, st := range a.Config.Sites {
+			if o, dup := seenSite[st.ID]; dup {
+				return fmt.Errorf("Site %q gehört zu den Agenten %q und %q", st.ID, o, a.ID)
+			}
+			seenSite[st.ID] = a.ID
+		}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	have, err := s.load()
+	if err != nil {
+		return err
+	}
+	if len(have) > 0 {
+		return errors.New("es gibt schon Agenten; eine Sicherung wird nur in eine leere Installation übernommen")
+	}
+	return s.save(in)
+}
+
 // List liefert alle Agenten nach ID sortiert.
 func (s *Store) List() ([]Agent, error) {
 	s.mu.Lock()

@@ -77,6 +77,17 @@ func (c Config) With(vals map[string]int) (Config, error) {
 	return next, nil
 }
 
+// Diff liefert die Werte, die vom Standard abweichen. Nur sie werden gespeichert, so wirken spätere neue Standardwerte weiter.
+func (c Config) Diff() map[string]int {
+	def, diff := DefaultConfig().Values(), map[string]int{}
+	for k, v := range c.Values() {
+		if v != def[k] {
+			diff[k] = v
+		}
+	}
+	return diff
+}
+
 // WithJSON übernimmt gespeicherte Werte (JSON-Objekt Schlüssel → Zahl); bei Fehlern bleibt c unverändert.
 func (c Config) WithJSON(raw string) (Config, error) {
 	var vals map[string]int

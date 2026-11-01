@@ -18,6 +18,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"sitewatch/internal/backup"
 	"strings"
 	"time"
 
@@ -60,7 +61,7 @@ func main() {
 }
 
 // thresholdsKey: unter diesem Schlüssel stehen die vom Standard abweichenden Schwellwerte (JSON) in der Datenbank.
-const thresholdsKey = "thresholds"
+const thresholdsKey = backup.ThresholdsKey
 
 func serve(args []string) {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
@@ -82,6 +83,7 @@ func serve(args []string) {
 	alertFrom := fs.String("alert-from", "", "Absender der Alarm-E-Mails")
 	alertSMTP := fs.String("alert-smtp", "localhost:25", "SMTP-Server host:port (STARTTLS, wenn angeboten)")
 	alertEvery := fs.Duration("alert-interval", time.Minute, "Prüfintervall der Alarmierung")
+	importFile := fs.String("import", "", "Sicherung (Export aus „Einstellungen“) in eine leere Installation einspielen, bevor der Server startet")
 	_ = fs.Parse(args)
 
 	if *signKey == "" {
@@ -101,6 +103,20 @@ func serve(args []string) {
 	st, err := store.OpenSQLite(filepath.Join(*data, "sitewatch.db"), cfg.Retention)
 	if err != nil {
 		log.Fatal(err)
+	}
+	ags, err := agents.Open(st.DB())
+	if err != nil {
+		log.Fatalf("Agenten: %v", err)
+	}
+	if *importFile != "" {
+		b, err := os.ReadFile(*importFile)
+		if err != nil {
+			log.Fatalf("-import: %v", err)
+		}
+		if err := backup.Import(b, ags, st); err != nil {
+			log.Fatalf("-import %s: %v", *importFile, err)
+		}
+		log.Printf("Sicherung %s eingespielt", *importFile)
 	}
 	if raw, ok, err := st.Setting(thresholdsKey); err != nil {
 		log.Fatalf("Schwellwerte lesen: %v", err)
@@ -169,9 +185,7 @@ func serve(args []string) {
 	if srv.SignKey, err = sign.LoadOrCreateKey(*signKey); err != nil {
 		log.Fatalf("-signing-key: %v", err)
 	}
-	if srv.Agents, err = agents.Open(st.DB()); err != nil {
-		log.Fatalf("Agenten: %v", err)
-	}
+	srv.Agents = ags
 	if n, err := srv.Agents.ImportFile(*agentsFile); err != nil {
 		log.Fatalf("Import der Agenten aus %s: %v", *agentsFile, err)
 	} else if n > 0 {
