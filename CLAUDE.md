@@ -11,6 +11,7 @@ Sprache der UI, Texte und Kommentare: Deutsch. Code-Bezeichner: Englisch bzw. wi
 - **Weckruf statt Endpunkt.** Für Seiten ohne Server-Cron (PHP-Bundle `cgoit/contao-sitewatch-bundle`, eigenes Repo) darf Sitewatch die öffentliche Seiten-URL anpingen, wenn der Report überfällig ist. Der Ping trägt keine Daten und keine Aufträge, das Bundle hat keinen eigenen Endpunkt; der Report geht weiterhin vom Bundle zu Sitewatch. Aufträge per Ping sind ausgeschlossen. Adresse ist die vom Admin gepflegte `site_url` des Bundle-Agenten (leer = kein Weckruf, keine TLS-Prüfung; nie die URL aus dem Report), nur https, 10 s Timeout, keine Weiterleitungen, keine internen Zieladressen (`internal/probe`). Dieselbe Adresse dient der TLS-Ablaufprüfung per Handshake; das Ergebnis ergänzt den Report, wenn er kein `tls_expires` enthält.
 - **Report des Contao-Bundles:** Pflicht sind nur Schema, Agent-Typ, Zeitpunkt, Site-ID und Art der Site. `host`-Daten (Platte, Backup, MariaDB, nginx) und Updates liefert das Bundle nicht; sie bleiben leer und die Bewertung ignoriert sie.
 - **Aufbewahrung** (Standard, im Cockpit änderbar): Verlauf 30 Tage jeder Punkt, 90 Tage alle 6 Stunden, 365 Tage je Tag; vollständige Tagesreports 90 Tage. Grob 3–5 MB je Server-Agent-Site und Jahr (Schätzung), 0,3 MB je Bundle.
+- **Zugang zur Oberfläche:** Login per OIDC über Authentik (Entscheidung des Eigentümers); Passkey/TOTP, IP-Beschränkung oder mTLS vor Sitewatch sind nicht vorgesehen.
 - **Zuerst lesend.** Schreibende Aktionen (Wartungsmodus, Updates) erst nach Sicherheitskonzept: feste Aktionsliste, keine freie Shell, signierte Aufträge (Ed25519) mit Ablaufzeit, Freigabe im Dashboard.
 - Tokens nie im Klartext speichern (nur SHA-256-Hash). Agenten samt Token-Hash stehen in der SQLite-Datenbank (Tabelle `agents`); `tokens.json` und `sitewatch token` gibt es nicht mehr, `agents.json` wird nur einmalig importiert. Schwellwerte pflegt man im Cockpit (Seite „Einstellungen“, Tabelle `meta`, nur Abweichungen vom Standard); `-thresholds` und `-stale` gibt es nicht mehr. Die Konfiguration (Agenten, Schwellwerte) lässt sich unter „Einstellungen“ exportieren und mit `serve -import` in eine leere Installation einspielen (`internal/backup`); `signing.key` bleibt bewusst eine Datei und ist nicht Teil des Exports. Sitewatch ist das einzige eingehend erreichbare Ziel und muss entsprechend gehärtet werden.
 
@@ -22,5 +23,5 @@ Sprache der UI, Texte und Kommentare: Deutsch. Code-Bezeichner: Englisch bzw. wi
 - Fehlende Daten sind `nil`/leer, nie geraten. Was der Agent nicht ermitteln konnte, steht in `site.problems`.
 
 ## Offene Entscheidungen
-- Zugang zu Sitewatch: Passkey oder TOTP, IP-Beschränkung, mTLS.
+Keine.
 Weitere Schritte: siehe `docs-intern/roadmap.md` (lokal, nicht im Repo) und README.md.
