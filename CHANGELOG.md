@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.5.0](https://github.com/cgoIT/sitewatch/compare/v0.4.1...v0.5.0) (2026-11-01)
+
+
+### ⚠ BREAKING CHANGES
+
+* -tokens, -thresholds und -stale haben keine Wirkung mehr.
+
+### Features
+
+* Agent-Typ contao-bundle, Agenten und Einstellungen in der Datenbank ([5ef0aba](https://github.com/cgoIT/sitewatch/commit/5ef0aba36ac1933fc8f8793d566a15c9e67a4a2e))
+* Konfiguration exportieren und mit -import in eine leere Installation einspielen ([521863c](https://github.com/cgoIT/sitewatch/commit/521863cc3b11f3a508702eaa87d8a949744d7931))
+* Weckruf und TLS-Ablaufprüfung für Contao-Bundles von Sitewatch aus ([49bcd59](https://github.com/cgoIT/sitewatch/commit/49bcd598dda2bfbca0f741f6197cf3fe0ee180f4))
+
+
+### Bug Fixes
+
+* SSRF-Filter des Weckrufs erweitert, veraltetes Zertifikat-Ablaufdatum verworfen, Import ohne Teilzustand ([22191d9](https://github.com/cgoIT/sitewatch/commit/22191d9a5549edd4f4f3f640c0dafc81b2307770))
+* Token-Hash-Prüfung ohne Zeichenvorrat (gitleaks-Fehlalarm), Fehlalarm vermerkt ([c24e08d](https://github.com/cgoIT/sitewatch/commit/c24e08dd45e8ad10cec82d8ca17ebd2e40b95eb8))
+
 ## [0.4.1](https://github.com/cgoIT/sitewatch/compare/v0.4.0...v0.4.1) (2026-10-31)
 
 
