@@ -8,7 +8,7 @@
   <div class="scroll"><table class="matrix">
     <thead><tr><th>Site</th>{{range .Matrix.Heads}}<th>{{.}}</th>{{end}}</tr></thead>
     <tbody>{{range .Matrix.Rows}}
-    <tr><td>{{if .Reported}}<a href="/sites/{{.ID}}" style="font-weight:500;text-decoration:none">{{.Name}}</a>{{else}}<span style="font-weight:500">{{.Name}}</span>{{end}}</td>{{range $i, $c := .Cells}}{{with $c}}<td class="mono cell {{.Level}}" data-label="{{index $.Matrix.Heads $i}}">{{.Text}}{{with .Trend}} <span class="tr {{.Class}}" title="{{.Title}}">{{.Text}}</span>{{end}}</td>{{end}}{{end}}</tr>
+    <tr><td>{{if .Reported}}<a href="/sites/{{.ID}}" style="font-weight:500;text-decoration:none">{{.Name}}</a>{{else}}<span style="font-weight:500">{{.Name}}</span>{{end}}</td>{{range $i, $c := .Cells}}{{with $c}}<td class="mono cell" data-label="{{index $.Matrix.Heads $i}}"><span class="lvb {{.Level}}">{{.Text}}</span>{{with .Trend}} <span class="tr {{.Class}}" title="{{.Title}}">{{.Text}}</span>{{end}}</td>{{end}}{{end}}</tr>
     {{else}}<tr><td colspan="99" class="muted">Keine Site passt zum Filter.</td></tr>
     {{end}}</tbody>
   </table></div>
