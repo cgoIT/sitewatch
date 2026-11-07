@@ -49,6 +49,10 @@ type Config struct {
 	MaintWarn       time.Duration   // Warnung, wenn der Wartungsmodus so lange an ist
 	MaintCrit       time.Duration   // kritisch, wenn er noch länger an ist (vergessen)
 	Retention       store.Retention // Aufbewahrung des Verlaufs und der Tagesstände (siehe store)
+	UptimeFails     int             // so viele Fehlschläge in Folge: Seite gilt als nicht erreichbar (kritisch)
+	LatencyWarn     time.Duration   // Warnung, wenn die Antwortzeit (Median der letzten Prüfungen) darüber liegt
+	UptimeWarnPct   int             // Anzeige: Erreichbarkeit der letzten 30 Tage darunter wird markiert (wirkt nicht auf den Status)
+	Uptime          UptimeSource    // optional: Erreichbarkeitsprüfung von Sitewatch aus; nil = keine
 	EOL             EOLSource       // optional: aktuelle Support-Enden (z. B. endoflife.date); nil = nur die eingebaute PHP-Tabelle
 }
 
@@ -56,7 +60,7 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{StaleAfter: 15 * time.Minute, BundleStaleAfter: 3 * time.Hour, BundlePingAfter: 90 * time.Minute, ErrorWarn: 10, EOLWarn: 90 * 24 * time.Hour,
 		TLSWarn: 14 * 24 * time.Hour, BackupMax: 36 * time.Hour, DiskWarn: 15, DiskCrit: 5, CronWarn: 2 * time.Hour, CronCrit: 4 * time.Hour, MaintWarn: 2 * time.Hour, MaintCrit: 8 * time.Hour,
-		Retention: store.DefaultRetention()}
+		UptimeFails: 3, LatencyWarn: 2 * time.Second, UptimeWarnPct: 99, Retention: store.DefaultRetention()}
 }
 
 // phpEOL: Ende der Sicherheitsunterstützung je PHP-Minor-Version.
@@ -150,10 +154,34 @@ func Evaluate(r *report.Report, receivedAt, now time.Time, cfg Config) Result {
 	if total >= cfg.ErrorWarn {
 		raise(Warn, "%d Fehler in den letzten 24 Stunden", total)
 	}
+	if cfg.Uptime != nil {
+		// u.Since nach now: Tagesstand aus der Vergangenheit, die heutige Prüfung gilt dafür nicht.
+		if u, ok := cfg.Uptime.Check(r.Site.ID); ok && !u.Since.After(now) {
+			switch {
+			case u.State == "down":
+				raise(Crit, "Seite nicht erreichbar seit %s", Duration(now.Sub(u.Since)))
+			case u.LatencyMS > 0 && time.Duration(u.LatencyMS)*time.Millisecond > cfg.LatencyWarn:
+				raise(Warn, "Antwortzeit %d ms", u.LatencyMS)
+			}
+		}
+	}
 	if len(r.Site.Problems) > 0 {
 		raise(Warn, "Teilweise keine Daten (%d Problem(e) beim Sammeln)", len(r.Site.Problems))
 	}
 	return res
+}
+
+// UptimeCheck ist der aktuelle Stand der Erreichbarkeitsprüfung einer Site. State: "up", "maint" oder "down" (erst nach
+// UptimeFails Fehlschlägen in Folge); Since: seit wann. LatencyMS = Median der letzten Prüfungen, 0 = unbekannt.
+type UptimeCheck struct {
+	State     string
+	Since     time.Time
+	LatencyMS int
+}
+
+// UptimeSource liefert den Stand der Prüfung; ok=false: die Site wird nicht geprüft oder es liegt noch nichts vor.
+type UptimeSource interface {
+	Check(siteID string) (UptimeCheck, bool)
 }
 
 // EOLSource liefert das Ende der Sicherheitsunterstützung je Produkt ("php", "contao", "mariadb", "nginx") und Version.

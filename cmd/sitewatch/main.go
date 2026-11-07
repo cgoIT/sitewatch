@@ -114,7 +114,7 @@ func serve(args []string) {
 		if err != nil {
 			log.Fatalf("-import: %v", err)
 		}
-		if err := backup.Import(b, ags, st); err != nil {
+		if err := backup.Import(b, ags, st, st); err != nil {
 			log.Fatalf("-import %s: %v", *importFile, err)
 		}
 		log.Printf("Sicherung %s eingespielt", *importFile)
@@ -150,8 +150,12 @@ func serve(args []string) {
 		go ep.Run(context.Background(), 24*time.Hour)
 	}
 	settings := status.NewSettings(cfg)
-	prober := &probe.Prober{Agents: ags, Store: st, Settings: settings, Now: time.Now}
+	prober := &probe.Prober{Agents: ags, Store: st, Settings: settings, Now: time.Now, Uptime: st}
 	go prober.Run(context.Background(), 5*time.Minute)
+	go prober.RunUptime(context.Background())
+	withUptime := settings.Get()
+	withUptime.Uptime = prober // Evaluate in Oberfläche und Alarm sieht damit „nicht erreichbar“
+	settings.Set(withUptime)
 	seen := probe.Store{Store: st, P: prober} // Reports samt ermitteltem Zertifikat-Ablauf, für Oberfläche und Alarme
 	var testMail func() error
 	if to := split(*alertTo); len(to) > 0 {
@@ -171,6 +175,7 @@ func serve(args []string) {
 	srv := web.New(seen, cfg)
 	srv.Settings = settings
 	srv.Probe = prober
+	srv.Uptime = st
 	srv.SaveSettings = func(c status.Config, vals map[string]int) error {
 		if len(vals) == 0 {
 			if err := st.DeleteSetting(thresholdsKey); err != nil {

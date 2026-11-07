@@ -31,6 +31,16 @@
     </div>{{end}}
     </div>
   </div></section>
+{{with .Uptime}}<section class="card"><h2>Erreichbarkeit <span class="muted" style="font-weight:400">· Prüfung von Sitewatch aus</span></h2>
+  <div class="pad">
+    {{if .View.Levels}}{{template "upband" .View.Levels}}<div class="legend"><span class="lv0 sw"></span> erreichbar <span class="lv1 sw"></span> Ausfälle <span class="lv2 sw"></span> viele Ausfälle <span class="lv3 sw"></span> keine Messung · letzte 90 Tage</div>
+    <dl class="kv" style="margin-top:12px"><dt>Jetzt</dt><dd>{{if eq .View.State "down"}}<span class="badge crit">Nicht erreichbar</span>{{else if eq .View.State "maint"}}<span class="badge maint">In Wartung</span>{{else if eq .View.State "up"}}<span class="badge ok">Erreichbar</span>{{else}}–{{end}}</dd>
+      <dt>Antwortzeit (Median, 1 h)</dt><dd class="mono">{{or .View.Latency "–"}}</dd>
+      <dt>7 Tage</dt><dd class="mono">{{.P7}}</dd><dt>30 Tage</dt><dd class="mono">{{.P30}}</dd><dt>90 Tage</dt><dd class="mono">{{.P90}}</dd></dl>
+    {{else}}<p class="muted" style="margin-top:0">Noch keine Messung. Geprüft wird die https-Adresse aus der Agent-Konfiguration.</p>{{end}}
+    {{with .Outages}}<div class="muted" style="margin-top:12px;font-size:12px">Ausfälle der letzten 7 Tage</div><ul class="reasons" style="margin:4px 0 0">{{range .}}<li>{{.From}} bis {{.To}} ({{.Dur}}, {{.Checks}} Prüfung(en))</li>{{end}}</ul>{{end}}
+    <form method="post" action="/sites/{{$.R.Site.ID}}/uptime" class="hist" style="margin-top:12px"><label class="chk"><input type="checkbox" name="enabled" value="1"{{if .Enabled}} checked{{end}}> Prüfung aktiv</label> <label>alle <select name="interval">{{range .Intervals}}<option value="{{.}}"{{if eq . $.Uptime.Interval}} selected{{end}}>{{div60 .}} Min.</option>{{end}}</select></label> <button type="submit">Speichern</button></form>
+  </div></section>{{end}}
 <div class="grid2">
   <div class="col-a">
     <section class="card"><h2>Stack</h2><div class="pad"><dl class="kv">

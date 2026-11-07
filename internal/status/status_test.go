@@ -70,3 +70,30 @@ func TestBundleProfile(t *testing.T) {
 		t.Errorf("Server-Agent nach 2 h: %v", got)
 	}
 }
+
+type fakeUptime map[string]UptimeCheck
+
+func (f fakeUptime) Check(id string) (UptimeCheck, bool) { u, ok := f[id]; return u, ok }
+
+func TestEvaluateUptime(t *testing.T) {
+	now := time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name string
+		u    UptimeCheck
+		want Level
+	}{
+		{"erreichbar", UptimeCheck{State: "up", Since: now.Add(-time.Hour), LatencyMS: 200}, OK},
+		{"langsam", UptimeCheck{State: "up", Since: now.Add(-time.Hour), LatencyMS: 2500}, Warn},
+		{"Wartung", UptimeCheck{State: "maint", Since: now.Add(-time.Hour)}, OK},
+		{"nicht erreichbar", UptimeCheck{State: "down", Since: now.Add(-time.Hour)}, Crit},
+		{"Tagesstand aus der Vergangenheit", UptimeCheck{State: "down", Since: now.Add(time.Hour)}, OK},
+	}
+	for _, c := range cases {
+		cfg := DefaultConfig()
+		cfg.Uptime = fakeUptime{"s": c.u}
+		r := &report.Report{Site: report.Site{ID: "s"}}
+		if got := Evaluate(r, now, now, cfg).Level; got != c.want {
+			t.Errorf("%s: %v, erwartet %v", c.name, got, c.want)
+		}
+	}
+}

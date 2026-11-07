@@ -49,6 +49,8 @@ type Prober struct {
 	Store    store.Store
 	Settings *status.Settings
 	Now      func() time.Time
+	// Uptime (optional) nimmt die Ergebnisse der Erreichbarkeitsprüfung auf (siehe RunUptime); nil = keine Prüfung.
+	Uptime store.Uptime
 	// AllowInternal erlaubt Ziele in privaten und lokalen Netzen; nur für Tests.
 	AllowInternal bool
 	tlsConfig     *tls.Config // nur für Tests (selbstsigniertes Zertifikat des Testservers)
@@ -59,6 +61,7 @@ type Prober struct {
 	lastPing map[string]time.Time
 	urls     map[string]string // Site-ID → Adresse, für die expires gilt
 	info     map[string]Info
+	up       map[string]*upState // Erreichbarkeitsprüfung, nur für aktivierte Sites
 }
 
 var errInternal = errors.New("Ziel ist keine öffentliche Adresse")
@@ -163,8 +166,14 @@ func (p *Prober) CertExpiry(ctx context.Context, raw string) (time.Time, error) 
 
 // Ping ruft die Seite einmal auf (GET, keine Weiterleitung, Antwort wird nicht gelesen) und liefert den Statuscode.
 func (p *Prober) Ping(ctx context.Context, raw string) (int, error) {
+	code, _, err := p.request(ctx, raw, "Sitewatch-Weckruf")
+	return code, err
+}
+
+// request ruft die Seite auf und liefert Statuscode und die Zeit bis zu den Antwort-Headern (inklusive DNS und TLS).
+func (p *Prober) request(ctx context.Context, raw, userAgent string) (int, time.Duration, error) {
 	if _, _, err := target(raw); err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	c := &http.Client{
 		Timeout:       timeout,
@@ -173,15 +182,18 @@ func (p *Prober) Ping(ctx context.Context, raw string) (int, error) {
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, raw, nil)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	req.Header.Set("User-Agent", "Sitewatch-Weckruf")
+	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("Cache-Control", "no-cache")
+	start := time.Now()
 	resp, err := c.Do(req)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
+	took := time.Since(start)
 	_ = resp.Body.Close()
-	return resp.StatusCode, nil
+	return resp.StatusCode, took, nil
 }
 
 // Info liefert die jüngsten Prüfergebnisse; ok ist false, wenn die Site nicht (mehr) geprüft wird.

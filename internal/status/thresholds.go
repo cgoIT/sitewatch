@@ -32,6 +32,7 @@ const (
 	gDisk    = "Speicherplatz"
 	gCron    = "Contao-Cron"
 	gMaint   = "Wartungsmodus"
+	gUptime  = "Erreichbarkeit (Ping)"
 	gHistory = "Aufbewahrung des Verlaufs"
 )
 
@@ -50,6 +51,9 @@ var Fields = []Field{
 	durField("cron_crit_minutes", gCron, "Letzter Cron-Lauf: kritisch, wenn älter als", "Minuten", time.Minute, func(c *Config) *time.Duration { return &c.CronCrit }),
 	durField("maintenance_warn_minutes", gMaint, "Wartungsmodus an: Warnung nach", "Minuten", time.Minute, func(c *Config) *time.Duration { return &c.MaintWarn }),
 	durField("maintenance_crit_minutes", gMaint, "Wartungsmodus an: kritisch nach", "Minuten", time.Minute, func(c *Config) *time.Duration { return &c.MaintCrit }),
+	intField("uptime_fail_count", gUptime, "Seite nicht erreichbar (kritisch) nach Fehlschlägen in Folge", "Prüfungen", func(c *Config) *int { return &c.UptimeFails }),
+	durField("latency_warn_ms", gUptime, "Antwortzeit: Warnung ab", "Millisekunden", time.Millisecond, func(c *Config) *time.Duration { return &c.LatencyWarn }),
+	intField("uptime_warn_pct", gUptime, "Erreichbarkeit (30 Tage): markieren unter", "%", func(c *Config) *int { return &c.UptimeWarnPct }),
 	intField("history_full_days", gHistory, "Jeder Messpunkt bis", "Tage", func(c *Config) *int { return &c.Retention.FullDays }),
 	intField("history_6h_days", gHistory, "Ein Punkt je 6 Stunden bis", "Tage", func(c *Config) *int { return &c.Retention.SixHourDays }),
 	intField("history_max_days", gHistory, "Ein Punkt je Tag bis (danach gelöscht)", "Tage", func(c *Config) *int { return &c.Retention.MaxDays }),
@@ -122,6 +126,8 @@ func (c Config) with(vals map[string]int) (Config, error) {
 		return c, fmt.Errorf("Freier Speicher: kritisch darf nicht über der Warnung liegen, die Warnung höchstens 100 %%")
 	case c.BundlePingAfter >= c.BundleStaleAfter:
 		return c, fmt.Errorf("Weckruf: muss früher kommen als die kritische Meldung „Keine Meldung seit“ des Contao-Bundles")
+	case c.UptimeWarnPct > 100:
+		return c, fmt.Errorf("Erreichbarkeit: höchstens 100 %%")
 	case c.MaintWarn > c.MaintCrit:
 		return c, fmt.Errorf("Wartungsmodus: die Warnung darf nicht später kommen als der kritische Wert")
 	case c.CronWarn > c.CronCrit:

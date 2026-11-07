@@ -53,7 +53,9 @@ type Server struct {
 	// ("" = niemand); ohne Login (Protect == nil) gibt es keine Seiten für Aufträge, weil die Freigabe eine Person braucht.
 	Jobs store.Jobs
 	Who  func(*http.Request) string
-	hub  hub
+	// Uptime (optional) liefert die Messwerte der Erreichbarkeitsprüfung; nil = keine Anzeige.
+	Uptime store.Uptime
+	hub    hub
 
 	annMu sync.Mutex
 	ann   map[string]announce
@@ -77,6 +79,7 @@ func New(s store.Store, cfg status.Config) *Server {
 		"hasAgents":   func() bool { return srv.Agents != nil },
 		"hasJobs":     func() bool { return srv.jobsUI() },
 		"kinds":       func() []string { return []string{"contao", "php", "host"} },
+		"div60":       func(n int) int { return n / 60 },
 		"fmtDate":     func(t time.Time) string { return t.Local().Format("02.01.2006") },
 		"fmtTime":     func(t time.Time) string { return t.Local().Format("02.01. 15:04") },
 	}).ParseFS(templateFS, "templates/*.html"))
@@ -91,6 +94,9 @@ func (s *Server) Handler() http.Handler {
 	ui.HandleFunc("GET /parameters", s.matrixPage("parameters"))
 	ui.HandleFunc("GET /sites/{id}", s.detail)
 	ui.HandleFunc("POST /sites/{id}/delete", s.siteDelete)
+	if s.Uptime != nil {
+		ui.HandleFunc("POST /sites/{id}/uptime", s.uptimeSet)
+	}
 	if s.TestMail != nil {
 		ui.HandleFunc("POST /alert-test", s.testMail)
 	}
@@ -180,6 +186,7 @@ type row struct {
 	Reported                           bool // es gibt einen Report, nur dann gibt es eine Detailseite
 	Orphan                             bool // Reports sind da, aber kein Agent ist mehr für die Site eingetragen
 	UpdatesTrend                       *arrow
+	Up                                 uptimeView
 	TLS, TLSLevel, Backup, BackupLevel string // "–" und Level "ok", wenn nicht gemeldet
 	// Nur für Hosts (Kind "host"): eigene Tabelle statt der Contao-Spalten.
 	Disk, MariaDB, Nginx, DiskLevel string
@@ -269,6 +276,11 @@ func (s *Server) rows(base map[string]store.Sample) ([]row, tiles, error) {
 		}
 	}
 	t.Total = len(rows)
+	if views := s.uptimeViews(30); views != nil {
+		for i := range rows {
+			rows[i].Up = views[rows[i].ID]
+		}
+	}
 	rank := map[string]int{"crit": 0, "warn": 1, "ok": 2}
 	sort.SliceStable(rows, func(i, j int) bool {
 		if rank[rows[i].Level] != rank[rows[j].Level] {
@@ -314,7 +326,7 @@ func (s *Server) overview(w http.ResponseWriter, r *http.Request) {
 			sites = append(sites, rw)
 		}
 	}
-	s.render(w, "overview.html", map[string]any{"Rows": sites, "Hosts": hosts, "Tiles": t, "Now": s.Now().Local().Format("02.01.2006 15:04"), "Filter": f, "Path": "/", "Mail": r.URL.Query().Get("mail")})
+	s.render(w, "overview.html", map[string]any{"UptimeOn": s.Uptime != nil, "Rows": sites, "Hosts": hosts, "Tiles": t, "Now": s.Now().Local().Format("02.01.2006 15:04"), "Filter": f, "Path": "/", "Mail": r.URL.Query().Get("mail")})
 }
 
 // matrixPage zeigt eine der beiden Matrizen ("versions" oder "parameters") mit demselben Filter wie die Übersicht.
@@ -459,6 +471,7 @@ func (s *Server) detail(w http.ResponseWriter, r *http.Request) {
 		"Maintenance": maintenanceLabel(rep.Site.MaintenanceMode, rep.Site.MaintenanceSince),
 		"Orphan":      s.orphan(id),
 		"ProbeLines":  s.probeLines(id),
+		"Uptime":      s.detailUptime(id),
 	})
 }
 

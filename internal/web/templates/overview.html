@@ -13,18 +13,18 @@
 {{if or .Rows (not .Hosts)}}<section class="card">
   <h2>Sites <span class="muted" style="font-weight:400">· Stand {{.Now}}</span></h2>
   <div class="scroll"><table>
-    <thead><tr><th>Site</th><th>Updates</th><th>Fehler 24 h</th><th>TLS läuft ab</th><th>Letztes Backup</th><th>Letzte Meldung</th><th>Status</th></tr></thead>
+    <thead><tr><th>Site</th><th>Updates</th><th>Fehler 24 h</th>{{if .UptimeOn}}<th>Erreichbarkeit</th>{{end}}<th>TLS läuft ab</th><th>Letztes Backup</th><th>Letzte Meldung</th><th>Status</th></tr></thead>
     <tbody>
     {{range .Rows}}
     <tr>
       <td>{{template "kindicon" .Kind}}{{if .Reported}}<a href="/sites/{{.ID}}" style="font-weight:500;text-decoration:none">{{.Name}}</a>{{else}}<span style="font-weight:500">{{.Name}}</span>{{end}}<div class="sub">{{.URL}}</div>
         {{if .Reasons}}<ul class="reasons">{{range .Reasons}}<li>{{.}}</li>{{end}}</ul>{{end}}</td>
-      <td class="mono" data-label="Updates">{{.Updates}}{{with .UpdatesTrend}} <span class="tr {{.Class}}" title="{{.Title}}">{{.Text}}</span>{{end}}</td><td class="mono" data-label="Fehler 24 h">{{.Errors}}</td><td class="mono lv {{.TLSLevel}}" data-label="TLS läuft ab">{{.TLS}}</td><td class="mono lv {{.BackupLevel}}" data-label="Letztes Backup">{{.Backup}}</td>
+      <td class="mono" data-label="Updates">{{.Updates}}{{with .UpdatesTrend}} <span class="tr {{.Class}}" title="{{.Title}}">{{.Text}}</span>{{end}}</td><td class="mono" data-label="Fehler 24 h">{{.Errors}}</td>{{if $.UptimeOn}}<td data-label="Erreichbarkeit">{{template "uptimecell" .Up}}</td>{{end}}<td class="mono lv {{.TLSLevel}}" data-label="TLS läuft ab">{{.TLS}}</td><td class="mono lv {{.BackupLevel}}" data-label="Letztes Backup">{{.Backup}}</td>
       <td data-label="Letzte Meldung">{{.Seen}}</td>
       <td data-label="Status"><span class="badge {{.Level}}">{{.Icon}} {{.Label}}</span>{{if .Maintenance}}<span class="badge maint">Wartung</span>{{end}}</td>
     </tr>
     {{else}}
-    <tr><td colspan="7" class="muted">{{if .Filter.Active}}Keine Site passt zum Filter.{{else}}Noch keine Sites registriert. Unter „Agenten“ einen Agenten anlegen.{{end}}</td></tr>
+    <tr><td colspan="99" class="muted">{{if .Filter.Active}}Keine Site passt zum Filter.{{else}}Noch keine Sites registriert. Unter „Agenten“ einen Agenten anlegen.{{end}}</td></tr>
     {{end}}
     </tbody>
   </table></div>
@@ -47,3 +47,5 @@
   </table></div>
 </section>{{end}}
 </main>{{template "foot"}}</body></html>
+{{define "uptimecell"}}<div>{{if .Off}}<span class="muted">aus</span>{{else if .Pct}}{{if eq .State "maint"}}<span class="badge maint">In Wartung</span> {{else if eq .State "down"}}<span class="badge crit">Nicht erreichbar</span> {{end}}<span class="mono upl {{.PctLevel}}">{{.Pct}}</span>{{template "upband" .Levels}}{{with .Latency}}<div class="sub">{{.}}</div>{{end}}{{else}}–{{end}}</div>{{end}}
+{{define "upband"}}<svg class="band sm" viewBox="0 0 {{len .}} 1" preserveAspectRatio="none" role="img" aria-label="Erreichbarkeit je Tag"><title>Erreichbarkeit je Tag, links der älteste</title>{{range $i, $l := .}}<rect x="{{$i}}" y="0" width="1" height="1" class="lv{{$l}}"/>{{end}}</svg>{{end}}

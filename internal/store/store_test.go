@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -306,7 +307,7 @@ func TestMigrate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v := version(s); v != baseVersion {
+	if v := version(s); v != baseVersion+len(migrations) {
 		t.Fatalf("neue Datenbank: Version %d", v)
 	}
 	// Datenbank aus der Zeit vor der Versionierung, mit einem Agenten: bleibt unverändert, bekommt nur die Version.
@@ -321,19 +322,19 @@ func TestMigrate(t *testing.T) {
 		t.Fatal(err)
 	}
 	var n int
-	if s.db.QueryRow(`SELECT COUNT(*) FROM agents WHERE id='a1'`).Scan(&n); n != 1 || version(s) != baseVersion {
+	if s.db.QueryRow(`SELECT COUNT(*) FROM agents WHERE id='a1'`).Scan(&n); n != 1 || version(s) != baseVersion+len(migrations) {
 		t.Fatalf("Altdatenbank: %d Agenten, Version %d", n, version(s))
 	}
 	s.Close()
 
 	old := migrations
 	t.Cleanup(func() { migrations = old })
-	migrations = []func(*sql.Tx) error{func(tx *sql.Tx) error { _, err := tx.Exec(`ALTER TABLE alert_state ADD COLUMN note TEXT`); return err }}
+	migrations = append(slices.Clone(old), func(tx *sql.Tx) error { _, err := tx.Exec(`ALTER TABLE alert_state ADD COLUMN note TEXT`); return err })
 	s, err = OpenSQLite(path, DefaultRetention())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v := version(s); v != baseVersion+1 {
+	if v := version(s); v != baseVersion+len(old)+1 {
 		t.Errorf("nach der Migration: Version %d", v)
 	}
 	if _, err := s.db.Exec(`UPDATE alert_state SET note='x'`); err != nil {
@@ -346,7 +347,7 @@ func TestMigrate(t *testing.T) {
 	if _, err := OpenSQLite(path, DefaultRetention()); err == nil {
 		t.Fatal("fehlerhafte Migration ohne Fehler")
 	}
-	migrations = migrations[:1]
+	migrations = migrations[:len(old)+1]
 	s, err = OpenSQLite(path, DefaultRetention())
 	if err != nil {
 		t.Fatalf("Version nach Fehlschlag verändert: %v", err)

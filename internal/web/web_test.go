@@ -271,3 +271,55 @@ func TestOverviewTLSAndBackupColumns(t *testing.T) {
 		t.Errorf("TLS/Backup werden nicht eingefärbt")
 	}
 }
+
+func TestUptimeColumnAndSetting(t *testing.T) {
+	srv, tok, now := setup(t)
+	st := srv.Store.(*store.SQLite)
+	srv.Uptime = st
+	rep := report.Report{Schema: 1, CollectedAt: now, Site: report.Site{ID: "kunde-c", Name: "Kunde C", Kind: "contao"}}
+	if w := post(srv, tok, rep); w.Code != http.StatusNoContent {
+		t.Fatalf("Ingest: %d", w.Code)
+	}
+	for i, state := range []string{store.CheckUp, store.CheckUp, store.CheckDown, store.CheckUp} {
+		if err := st.AddCheck("kunde-c", store.Check{At: now.Add(-time.Duration(10-i) * time.Minute), State: state, LatencyMS: 180, Code: 200}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	get := func(path string) string {
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+		if w.Code != 200 {
+			t.Fatalf("%s: %d", path, w.Code)
+		}
+		return w.Body.String()
+	}
+	b := get("/")
+	// 3 von 4 Prüfungen erreichbar = 75 %; Antwortzeit 180 ms
+	if !strings.Contains(b, "<th>Erreichbarkeit</th>") || !strings.Contains(b, "75,00 %") || !strings.Contains(b, "180 ms") || !strings.Contains(b, "upl warn") {
+		t.Errorf("Spalte Erreichbarkeit unvollständig")
+	}
+	if d := get("/sites/kunde-c"); !strings.Contains(d, "Ausfälle der letzten 7 Tage") || !strings.Contains(d, `action="/sites/kunde-c/uptime"`) {
+		t.Errorf("Detailseite ohne Erreichbarkeit")
+	}
+	post := func(vals string) int {
+		req := httptest.NewRequest(http.MethodPost, "/sites/kunde-c/uptime", strings.NewReader(vals))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("Origin", "http://example.com")
+		req.Host = "example.com"
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+		return w.Code
+	}
+	if c := post("interval=7"); c != http.StatusNotFound {
+		t.Errorf("ungültiges Intervall: %d", c)
+	}
+	if c := post("interval=300"); c != http.StatusSeeOther { // Haken fehlt = abgeschaltet
+		t.Errorf("speichern: %d", c)
+	}
+	if s, _ := st.UptimeSettings(); s["kunde-c"].Enabled || s["kunde-c"].IntervalS != 300 {
+		t.Errorf("gespeichert: %+v", s)
+	}
+	if b := get("/"); !strings.Contains(b, `<span class="muted">aus</span>`) {
+		t.Errorf("abgeschaltete Prüfung nicht gekennzeichnet")
+	}
+}

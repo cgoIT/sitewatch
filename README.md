@@ -12,6 +12,7 @@ Was das Dashboard zeigt (je Site und für den Server):
 - letzte Fehler aus den Monolog-Logs, offene Contao-Migrationen, letzter Contao-Cron-Lauf
 - freier Speicherplatz, Alter des letzten Backups, Ablauf des TLS-Zertifikats, Wartungsmodus
 - Verlauf und Trends (Kurven, Statusband, Tagesstände) und eine Bewertung OK / Warnung / Kritisch
+- Erreichbarkeit und Antwortzeit: Sitewatch ruft die https-Adresse jeder Site regelmäßig auf (Uptime in %, Verlauf je Tag, Latenz)
 - Alarmierung per E-Mail, wenn eine Site kritisch wird
 - Aufträge aus einer **festen Liste** (z. B. Wartungsmodus, Cache leeren, Snapshot), jeweils mit Freigabe im Dashboard und Live-Ausgabe
 
@@ -141,12 +142,32 @@ Hat ein Contao-Bundle-Agent eine Seiten-URL (https), prüft Sitewatch alle sechs
 Seite“ unter „Einstellungen“ (Standard 90 Minuten), höchstens alle 15 Minuten. Das weckt den Contao-Cron bei Seiten mit wenig Besuchern.
 Der Aufruf ist ein einfaches GET ohne Daten; Weiterleitungen und Ziele in privaten Netzen werden nicht verfolgt. Ohne URL passiert nichts.
 
+## Erreichbarkeit (Ping-Modus)
+
+Für jede Site mit https-Adresse in der Agent-Konfiguration (Server-Agent und Contao-Bundle) ruft Sitewatch die Seite standardmäßig alle
+**3 Minuten** auf (wählbar: 1, 3, 5, 15 Minuten; abschaltbar je Site auf der Detailseite unter „Erreichbarkeit“). Gemessen wird die Zeit bis zu den
+Antwort-Headern. Der Aufruf ist ein einfaches GET (Kennung `Sitewatch-Uptime`) ohne Daten; Weiterleitungen werden nicht verfolgt, Ziele in
+privaten Netzen und http-Adressen werden abgelehnt (wie beim Weckruf). Ohne Adresse passiert nichts.
+
+- **Erreichbar:** 2xx, 3xx, 401 und 403. **Nicht erreichbar:** übrige 4xx/5xx, Zeitüberschreitung, Verbindungsfehler.
+- **In Wartung:** 503, wenn der letzte Report den Wartungsmodus meldet, sonst höchstens 15 Minuten lang (der Report kann hinterherhinken).
+  Wartung löst keinen Alarm aus und zählt in der Erreichbarkeit nicht als Ausfall.
+- **Kritisch** wird eine Site erst nach „Seite nicht erreichbar nach … Fehlschlägen in Folge“ (Standard 3, unter „Einstellungen“); die Alarm-Mail
+  kommt über die vorhandene Alarmierung. **Warnung** bei einer Antwortzeit (Median der letzten 5 Prüfungen) über 2000 ms. Die Erreichbarkeit
+  der letzten 30 Tage wird unter 99 % markiert (nur Anzeige).
+- **Anzeige:** Spalte „Erreichbarkeit“ in der Sites-Übersicht (Prozent, Streifen je Tag über 30 Tage, Antwortzeit) und Karte auf der
+  Detailseite (7/30/90 Tage, Ausfälle der letzten 7 Tage).
+- **Aufbewahrung:** Einzelmessungen 7 Tage, danach eine Zeile je Tag (bis „Ein Punkt je Tag bis“, Standard 365 Tage). Grob 0,5 MB je Site
+  und Jahr (Schätzung). Die Einstellungen je Site stehen im Export der Konfiguration, die Messwerte nicht.
+- Sitewatch misst von einem Standort aus. Eine Störung bei Sitewatch selbst erzeugt Lücken (keine Messung, kein Ausfall), ein Netzproblem
+  am Sitewatch-Server kann aber mehrere Sites zugleich als „nicht erreichbar“ zeigen.
+
 ## Sichern und Umziehen
 
 - **Datensicherung:** Alles liegt in `<data>/sitewatch.db` (SQLite) und `<data>/signing.key`. Die Datenbank sichert man im laufenden Betrieb mit
   `sqlite3 sitewatch.db "VACUUM INTO '/ziel/sitewatch.db'"`; `signing.key` ist eine Datei (Rechte 0600) und gehört in dieselbe Sicherung.
 - **Konfiguration exportieren:** Unter „Einstellungen“ → „Sicherung“ liefert „Konfiguration exportieren“ eine JSON-Datei mit den Agenten
-  (samt Token-Hash) und den Schwellwerten, ohne Reports und ohne Signierschlüssel. Die Datei ist so schützenswert wie die Datenbank.
+  (samt Token-Hash), den Schwellwerten und den Einstellungen der Erreichbarkeitsprüfung, ohne Reports und ohne Signierschlüssel. Die Datei ist so schützenswert wie die Datenbank.
   Der Export hängt am Login der Oberfläche; mit `-no-login` (nur zum Entwickeln) ist er für alle erreichbar.
 - **Umzug:** Auf dem neuen Server `signing.key` ins Datenverzeichnis legen (sonst lehnen die Agenten neue Konfigurationen ab) und die Datei
   einmalig einspielen: `sitewatch serve -data … -import sitewatch-2026-11-01.json`. Das geht nur in eine Installation ohne Agenten; eine

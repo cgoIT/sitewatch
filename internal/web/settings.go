@@ -97,7 +97,7 @@ func (s *Server) settingsReset(w http.ResponseWriter, r *http.Request) {
 	s.settingsMu.Lock()
 	defer s.settingsMu.Unlock()
 	cfg := status.DefaultConfig()
-	cfg.EOL = s.cfg().EOL // die Quelle der Support-Enden ist keine Einstellung
+	cfg.EOL, cfg.Uptime = s.cfg().EOL, s.cfg().Uptime // die Quellen (Support-Enden, Erreichbarkeit) sind keine Einstellung
 	if err := s.SaveSettings(cfg, nil); err != nil {
 		log.Printf("settings: zurücksetzen: %v", err)
 		http.Error(w, "interner Fehler", http.StatusInternalServerError)
@@ -110,7 +110,7 @@ func (s *Server) settingsReset(w http.ResponseWriter, r *http.Request) {
 // settingsExport liefert die Konfiguration (Agenten mit Token-Hash, Schwellwerte) als Download. POST, damit kein Link und kein
 // fremder Seitenaufruf sie auslöst; die Datei ist so schützenswert wie die Datenbank.
 func (s *Server) settingsExport(w http.ResponseWriter, r *http.Request) {
-	f, err := backup.Export(s.Agents, s.cfg(), s.Now())
+	f, err := backup.Export(s.Agents, s.Uptime, s.cfg(), s.Now())
 	if err != nil {
 		log.Printf("settings: Export: %v", err)
 		http.Error(w, "interner Fehler", http.StatusInternalServerError)

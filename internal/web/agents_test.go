@@ -273,7 +273,15 @@ func TestSettingsPage(t *testing.T) {
 			t.Errorf("%s: %d", name, w.Code)
 		}
 	}
-	// Zurücksetzen: Standardwerte, nil an den Speicher.
+	// Zurücksetzen: Standardwerte, nil an den Speicher; die Erreichbarkeitsquelle bleibt erhalten.
+	c := srv.cfg()
+	c.Uptime = fakeUp{}
+	srv.Settings.Set(c)
+	defer func() {
+		if srv.cfg().Uptime == nil {
+			t.Error("Zurücksetzen verliert die Quelle der Erreichbarkeit")
+		}
+	}()
 	if w := do(srv, "POST", "/settings/reset", url.Values{}, nil); w.Code != http.StatusSeeOther || savedVals != nil || srv.cfg().TLSWarn != 14*24*time.Hour {
 		t.Errorf("zurücksetzen: %d %v %v", w.Code, savedVals, srv.cfg().TLSWarn)
 	}
@@ -388,3 +396,7 @@ func TestProbeLines(t *testing.T) {
 		t.Errorf("Fehler nicht angezeigt: %s", b)
 	}
 }
+
+type fakeUp struct{}
+
+func (fakeUp) Check(string) (status.UptimeCheck, bool) { return status.UptimeCheck{}, false }
