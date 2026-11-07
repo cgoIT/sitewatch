@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.1.0](https://github.com/cgoIT/sitewatch/compare/v1.0.0...v1.1.0) (2026-11-07)
+
+
+### Features
+
+* Hinweis bei Massenausfall, Ping-Modus in CLAUDE.md festgehalten ([60391b4](https://github.com/cgoIT/sitewatch/commit/60391b44f699465e41531ddf6875e4043c4ba86f))
+* Ping-Modus (Erreichbarkeit und Antwortzeit) ([be05776](https://github.com/cgoIT/sitewatch/commit/be057760d50072d5b5aabf74ac79f2cf72985012))
+* **web:** Übersicht auf drei Seiten, Hosts-Tabelle, TLS/Backup-Spalten, Verlauf mobil unten ([c49a8e7](https://github.com/cgoIT/sitewatch/commit/c49a8e74a994f772b30e983d6ab5e4d6a562f6cc))
+
 ## [1.0.0](https://github.com/cgoIT/sitewatch/compare/v0.6.1...v1.0.0) (2026-11-01)
 
 
