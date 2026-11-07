@@ -111,3 +111,27 @@ func mustState(t *testing.T, p *Prober) string {
 	}
 	return u.State
 }
+
+func TestMassDown(t *testing.T) {
+	p := &Prober{up: map[string]*upState{}}
+	add := func(id, state string) { p.up[id] = &upState{state: state} }
+	add("a", "down")
+	add("b", "down")
+	add("c", "up")
+	if p.MassDown() {
+		t.Error("2 von 3 ausgefallen sind noch kein Massenausfall")
+	}
+	add("c", "down")
+	add("d", "up")
+	if p.MassDown() { // 3 von 4 = 75 %
+		t.Error("75 % reichen nicht")
+	}
+	add("d", "down")
+	if !p.MassDown() {
+		t.Error("4 von 4 ausgefallen nicht erkannt")
+	}
+	add("e", "")
+	if !p.MassDown() {
+		t.Error("Sites ohne Zustand zählen nicht")
+	}
+}

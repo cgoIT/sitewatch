@@ -326,7 +326,7 @@ func (s *Server) overview(w http.ResponseWriter, r *http.Request) {
 			sites = append(sites, rw)
 		}
 	}
-	s.render(w, "overview.html", map[string]any{"UptimeOn": s.Uptime != nil, "Rows": sites, "Hosts": hosts, "Tiles": t, "Now": s.Now().Local().Format("02.01.2006 15:04"), "Filter": f, "Path": "/", "Mail": r.URL.Query().Get("mail")})
+	s.render(w, "overview.html", map[string]any{"UptimeOn": s.Uptime != nil, "MassDown": s.massDown(), "Rows": sites, "Hosts": hosts, "Tiles": t, "Now": s.Now().Local().Format("02.01.2006 15:04"), "Filter": f, "Path": "/", "Mail": r.URL.Query().Get("mail")})
 }
 
 // matrixPage zeigt eine der beiden Matrizen ("versions" oder "parameters") mit demselben Filter wie die Übersicht.
@@ -575,4 +575,10 @@ func (s *Server) testMail(w http.ResponseWriter, r *http.Request) {
 		res = "fail"
 	}
 	http.Redirect(w, r, "/?mail="+res, http.StatusSeeOther)
+}
+
+// massDown: viele Sites zugleich nicht erreichbar; die Ursache liegt dann wahrscheinlich bei Sitewatch selbst.
+func (s *Server) massDown() bool {
+	m, ok := s.cfg().Uptime.(interface{ MassDown() bool })
+	return ok && m.MassDown()
 }

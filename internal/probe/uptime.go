@@ -98,6 +98,24 @@ func (p *Prober) Check(siteID string) (status.UptimeCheck, bool) {
 	return status.UptimeCheck{State: s.state, Since: s.since, LatencyMS: s.median()}, true
 }
 
+// MassDown sagt, ob so viele Sites zugleich "down" sind (mindestens 3 und 80 % der geprüften), dass die Ursache eher bei Sitewatch
+// (Netz, DNS) als bei den Sites liegt. Nur ein Hinweis in der Oberfläche; Status und Alarme bleiben unverändert.
+func (p *Prober) MassDown() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	down, total := 0, 0
+	for _, s := range p.up {
+		if s.state == "" {
+			continue
+		}
+		total++
+		if s.state == "down" {
+			down++
+		}
+	}
+	return down >= 3 && down*100 >= total*80
+}
+
 func (p *Prober) failN() int {
 	if p.Settings == nil {
 		return status.DefaultConfig().UptimeFails

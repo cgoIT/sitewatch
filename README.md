@@ -159,6 +159,7 @@ privaten Netzen und http-Adressen werden abgelehnt (wie beim Weckruf). Ohne Adre
   Detailseite (7/30/90 Tage, Ausfälle der letzten 7 Tage).
 - **Aufbewahrung:** Einzelmessungen 7 Tage, danach eine Zeile je Tag (bis „Ein Punkt je Tag bis“, Standard 365 Tage). Grob 0,5 MB je Site
   und Jahr (Schätzung). Die Einstellungen je Site stehen im Export der Konfiguration, die Messwerte nicht.
+- Fallen mindestens 3 Sites und 80 % der geprüften zugleich aus, zeigt die Übersicht den Hinweis, dass das Problem eher bei Sitewatch (Netz, DNS) liegt; Status und Alarme ändert das nicht.
 - Sitewatch misst von einem Standort aus. Eine Störung bei Sitewatch selbst erzeugt Lücken (keine Messung, kein Ausfall), ein Netzproblem
   am Sitewatch-Server kann aber mehrere Sites zugleich als „nicht erreichbar“ zeigen.
 

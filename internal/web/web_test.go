@@ -323,3 +323,28 @@ func TestUptimeColumnAndSetting(t *testing.T) {
 		t.Errorf("abgeschaltete Prüfung nicht gekennzeichnet")
 	}
 }
+
+type massDownSrc struct{ down bool }
+
+func (massDownSrc) Check(string) (status.UptimeCheck, bool) { return status.UptimeCheck{}, false }
+func (m massDownSrc) MassDown() bool                        { return m.down }
+
+func TestMassDownBanner(t *testing.T) {
+	srv, _, _ := setup(t)
+	get := func() string {
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/", nil))
+		return w.Body.String()
+	}
+	c := srv.cfg()
+	c.Uptime = massDownSrc{down: true}
+	srv.Settings.Set(c)
+	if !strings.Contains(get(), "Möglicherweise liegt das Problem bei Sitewatch") {
+		t.Error("Hinweis fehlt")
+	}
+	c.Uptime = massDownSrc{}
+	srv.Settings.Set(c)
+	if strings.Contains(get(), "Möglicherweise liegt das Problem bei Sitewatch") {
+		t.Error("Hinweis ohne Massenausfall")
+	}
+}
