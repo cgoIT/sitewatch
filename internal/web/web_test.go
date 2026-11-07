@@ -267,7 +267,7 @@ func TestOverviewTLSAndBackupColumns(t *testing.T) {
 	if strings.Contains(b, `data-label="Contao"`) {
 		t.Errorf("Contao-Spalte sollte nicht mehr in der Übersicht stehen")
 	}
-	if !strings.Contains(b, "lv warn") && !strings.Contains(b, "lv crit") {
+	if !strings.Contains(b, "lvb warn") && !strings.Contains(b, "lvb crit") {
 		t.Errorf("TLS/Backup werden nicht eingefärbt")
 	}
 }

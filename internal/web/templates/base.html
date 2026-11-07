@@ -27,7 +27,8 @@ td.mono{white-space:nowrap}
 :where(table.compact) th,:where(table.compact) td{padding-left:12px;padding-right:12px} /* schmale Karte: sonst läuft die Tabelle über und scrollt */
 .mono{font-family:"IBM Plex Mono",ui-monospace,monospace}
 .sub{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px;color:var(--muted)}
-.badge{display:inline-block;padding:4px 10px;border-radius:4px;font-weight:500;font-size:13px}
+.lvb{padding:3px 8px;border-radius:4px}.lvb.warn{background:#FBEFD2;color:#6B4600}.lvb.crit{background:#FBE4E2;color:#8F1C16}
+.badge{white-space:nowrap;display:inline-block;padding:4px 10px;border-radius:4px;font-weight:500;font-size:13px}
 .badge.ok{background:#E4F3EA;color:#14612F}
 .badge.warn{background:#FBEFD2;color:#6B4600}
 .badge.crit{background:#FBE4E2;color:#8F1C16}
@@ -72,8 +73,8 @@ fieldset.site legend{font-size:13px;font-weight:600;padding:0 6px}
 pre.code{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:12px 16px;overflow-x:auto;font:13px/1.5 "IBM Plex Mono",ui-monospace,monospace;margin:0}
 table.matrix{min-width:0}
 td.cell,table.matrix th:not(:first-child){text-align:center}
-td.cell.warn,td.lv.warn{background:#FBEFD2;color:#6B4600}
-td.cell.crit,td.lv.crit{background:#FBE4E2;color:#8F1C16}
+td.cell.warn{background:#FBEFD2;color:#6B4600}
+td.cell.crit{background:#FBE4E2;color:#8F1C16}
 button.linkbtn{font:inherit;font-size:12px;border:0;background:none;color:var(--accent);cursor:pointer;padding:0;text-decoration:underline}
 footer.foot{max-width:1360px;margin:0 auto;padding:0 32px 24px;color:var(--muted);font-size:12px}
 @media (max-width:640px){
