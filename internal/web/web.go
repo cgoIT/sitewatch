@@ -87,6 +87,8 @@ func New(s store.Store, cfg status.Config) *Server {
 func (s *Server) Handler() http.Handler {
 	ui := http.NewServeMux()
 	ui.HandleFunc("GET /{$}", s.overview)
+	ui.HandleFunc("GET /versions", s.matrixPage("versions"))
+	ui.HandleFunc("GET /parameters", s.matrixPage("parameters"))
 	ui.HandleFunc("GET /sites/{id}", s.detail)
 	ui.HandleFunc("POST /sites/{id}/delete", s.siteDelete)
 	if s.TestMail != nil {
@@ -170,14 +172,17 @@ func (s *Server) ingest(w http.ResponseWriter, r *http.Request) {
 }
 
 type row struct {
-	ID, Name, URL, Kind, Contao, PHP string
-	Updates, Errors, Seen            string
-	Level, Label, Icon               string
-	Reasons                          []string
-	Maintenance                      bool
-	Reported                         bool // es gibt einen Report, nur dann gibt es eine Detailseite
-	Orphan                           bool // Reports sind da, aber kein Agent ist mehr für die Site eingetragen
-	UpdatesTrend                     *arrow
+	ID, Name, URL, Kind                string
+	Updates, Errors, Seen              string
+	Level, Label, Icon                 string
+	Reasons                            []string
+	Maintenance                        bool
+	Reported                           bool // es gibt einen Report, nur dann gibt es eine Detailseite
+	Orphan                             bool // Reports sind da, aber kein Agent ist mehr für die Site eingetragen
+	UpdatesTrend                       *arrow
+	TLS, TLSLevel, Backup, BackupLevel string // "–" und Level "ok", wenn nicht gemeldet
+	// Nur für Hosts (Kind "host"): eigene Tabelle statt der Contao-Spalten.
+	Disk, MariaDB, Nginx, DiskLevel string
 }
 
 type tiles struct{ Total, Contao, PHP, Crit, Warn, Updates int }
@@ -206,11 +211,18 @@ func (s *Server) rows(base map[string]store.Sample) ([]row, tiles, error) {
 		rep := e.Report
 		res := status.Evaluate(&rep, e.ReceivedAt, now, s.cfg())
 		rw := row{
-			ID: rep.Site.ID, Name: rep.Site.Name, URL: rep.Site.URL, Kind: rep.Site.Kind, Contao: dash(rep.Site.Contao), PHP: dash(rep.Site.PHP),
+			ID: rep.Site.ID, Name: rep.Site.Name, URL: rep.Site.URL, Kind: rep.Site.Kind,
 			Updates: "–", Errors: "–", Seen: status.Ago(now.Sub(e.ReceivedAt)),
+			TLS: "–", TLSLevel: "ok", Backup: "–", BackupLevel: "ok",
 			Reasons:     res.Reasons,
 			Maintenance: rep.Site.MaintenanceMode != nil && *rep.Site.MaintenanceMode, Reported: true,
 			Orphan: s.Agents != nil && !known[rep.Site.ID],
+		}
+		if t := rep.Site.TLSExpires; t != nil {
+			rw.TLS, rw.TLSLevel = t.Local().Format("02.01.2006"), status.TLSLevel(*t, now, s.cfg()).String()
+		}
+		if b := rep.Site.LastBackup; b != nil {
+			rw.Backup, rw.BackupLevel = status.Ago(now.Sub(*b)), status.BackupLevel(*b, now, s.cfg()).String()
 		}
 		if rw.Orphan {
 			rw.Reasons = append(rw.Reasons, "Gehört zu keinem Agenten mehr (verwaist), auf der Detailseite entfernbar")
@@ -230,6 +242,11 @@ func (s *Server) rows(base map[string]store.Sample) ([]row, tiles, error) {
 			t.Contao++
 		} else if rep.Site.Kind == "php" {
 			t.PHP++
+		} else if rep.Site.Kind == "host" {
+			rw.MariaDB, rw.Nginx, rw.Disk, rw.DiskLevel = dash(rep.Host.MariaDB), dash(rep.Host.Nginx), "–", "ok"
+			if p := rep.Host.DiskFreePct; p != nil {
+				rw.Disk, rw.DiskLevel = fmt.Sprintf("%d %%", *p), status.DiskLevel(*p, s.cfg()).String()
+			}
 		}
 		setLevel(&rw, res.Level)
 		rows = append(rows, rw)
@@ -238,7 +255,7 @@ func (s *Server) rows(base map[string]store.Sample) ([]row, tiles, error) {
 		if seen[id] {
 			continue
 		}
-		rw := row{ID: id, Name: id, Contao: "–", PHP: "–", Updates: "–", Errors: "–", Seen: "noch nie",
+		rw := row{ID: id, Name: id, Updates: "–", Errors: "–", Seen: "noch nie", TLS: "–", TLSLevel: "ok", Backup: "–", BackupLevel: "ok",
 			Reasons: []string{"Noch keine Meldung eingegangen"}}
 		setLevel(&rw, status.Crit)
 		rows = append(rows, rw)
@@ -282,26 +299,48 @@ func dash(s string) string {
 }
 
 func (s *Server) overview(w http.ResponseWriter, r *http.Request) {
-	base := s.baselines()
-	rows, t, err := s.rows(base)
-	if err != nil {
-		log.Printf("overview: %v", err)
-		http.Error(w, "interner Fehler", http.StatusInternalServerError)
-		return
-	}
-	versions, params, err := s.matrices(base)
+	rows, t, err := s.rows(s.baselines())
 	if err != nil {
 		log.Printf("overview: %v", err)
 		http.Error(w, "interner Fehler", http.StatusInternalServerError)
 		return
 	}
 	f := filterFrom(r)
-	rows = f.apply(rows)
-	keep := map[string]bool{}
-	for _, rw := range rows {
-		keep[rw.ID] = true
+	var sites, hosts []row // Hosts haben andere Kennzahlen als Contao-/PHP-Sites und bekommen eine eigene Tabelle
+	for _, rw := range f.apply(rows) {
+		if rw.Kind == "host" {
+			hosts = append(hosts, rw)
+		} else {
+			sites = append(sites, rw)
+		}
 	}
-	for _, m := range []*matrix{&versions, &params} {
+	s.render(w, "overview.html", map[string]any{"Rows": sites, "Hosts": hosts, "Tiles": t, "Now": s.Now().Local().Format("02.01.2006 15:04"), "Filter": f, "Path": "/", "Mail": r.URL.Query().Get("mail")})
+}
+
+// matrixPage zeigt eine der beiden Matrizen ("versions" oder "parameters") mit demselben Filter wie die Übersicht.
+// shortcut: baut immer beide Matrizen und alle Zeilen, auch wenn nur eine Seite gezeigt wird; bei einigen hundert Sites aufteilen.
+func (s *Server) matrixPage(active string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		base := s.baselines()
+		rows, _, err := s.rows(base)
+		var versions, params matrix
+		if err == nil {
+			versions, params, err = s.matrices(base)
+		}
+		if err != nil {
+			log.Printf("%s: %v", active, err)
+			http.Error(w, "interner Fehler", http.StatusInternalServerError)
+			return
+		}
+		f := filterFrom(r)
+		keep := map[string]bool{}
+		for _, rw := range f.apply(rows) {
+			keep[rw.ID] = true
+		}
+		m := versions
+		if active == "parameters" {
+			m = params
+		}
 		kept := m.Rows[:0]
 		for _, mr := range m.Rows {
 			if keep[mr.ID] {
@@ -309,8 +348,8 @@ func (s *Server) overview(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		m.Rows = kept
+		s.render(w, "matrix.html", map[string]any{"Matrix": m, "Active": active, "Filter": f, "Path": r.URL.Path, "Now": s.Now().Local().Format("02.01.2006 15:04")})
 	}
-	s.render(w, "overview.html", map[string]any{"Rows": rows, "Tiles": t, "Versions": versions, "Params": params, "Now": s.Now().Local().Format("02.01.2006 15:04"), "Filter": f, "Mail": r.URL.Query().Get("mail")})
 }
 
 // filter schränkt die Übersicht ein (GET-Formular, ohne JavaScript). Die Kacheln oben zählen immer alle Sites.

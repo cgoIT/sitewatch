@@ -216,3 +216,58 @@ func TestDetailDaySnapshot(t *testing.T) {
 		}
 	}
 }
+
+func TestMatrixPagesAndHostTable(t *testing.T) {
+	srv, tok, now := setup(t)
+	free := 42
+	rep := report.Report{Schema: 1, CollectedAt: now, Site: report.Site{ID: "kunde-c", Name: "Kunde C", Kind: "host"}, Host: report.Host{DiskFreePct: &free}}
+	if w := post(srv, tok, rep); w.Code != http.StatusNoContent {
+		t.Fatalf("Ingest: %d %s", w.Code, w.Body.String())
+	}
+	get := func(path string) string {
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+		if w.Code != 200 {
+			t.Fatalf("%s: %d", path, w.Code)
+		}
+		return w.Body.String()
+	}
+	if b := get("/"); !strings.Contains(b, "<h2>Hosts</h2>") || !strings.Contains(b, "42 %") || strings.Contains(b, "<h2>Versionen") {
+		t.Errorf("Übersicht: Host-Tabelle fehlt oder Matrix noch dabei")
+	}
+	if b := get("/?kind=contao"); strings.Contains(b, "<h2>Hosts</h2>") || !strings.Contains(b, "Keine Site passt zum Filter") {
+		t.Errorf("Filter kind=contao: Hosts-Tabelle sichtbar oder Sites-Hinweis fehlt")
+	}
+	if b := get("/?kind=host"); strings.Contains(b, "<h2>Sites") || !strings.Contains(b, "<h2>Hosts</h2>") {
+		t.Errorf("Filter kind=host: Sites-Tabelle sichtbar oder Hosts fehlen")
+	}
+	if b := get("/versions"); !strings.Contains(b, "Kunde C") || !strings.Contains(b, "MariaDB") || strings.Contains(b, "Letztes Backup") {
+		t.Errorf("/versions unerwartet")
+	}
+	if b := get("/parameters?q=nichts"); strings.Contains(b, ">Kunde C<") || !strings.Contains(b, "passt zum Filter") {
+		t.Errorf("/parameters ignoriert den Filter")
+	}
+}
+
+func TestOverviewTLSAndBackupColumns(t *testing.T) {
+	srv, tok, now := setup(t)
+	tls, bk := now.Add(5*24*time.Hour), now.Add(-30*24*time.Hour) // TLS bald abgelaufen, Backup uralt
+	rep := report.Report{Schema: 1, CollectedAt: now, Site: report.Site{ID: "kunde-c", Name: "Kunde C", Kind: "contao", TLSExpires: &tls, LastBackup: &bk}}
+	if w := post(srv, tok, rep); w.Code != http.StatusNoContent {
+		t.Fatalf("Ingest: %d", w.Code)
+	}
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/", nil))
+	b := w.Body.String()
+	for _, l := range []string{"TLS läuft ab", "Letztes Backup"} {
+		if !strings.Contains(b, `data-label="`+l+`"`) {
+			t.Errorf("Spalte %q fehlt", l)
+		}
+	}
+	if strings.Contains(b, `data-label="Contao"`) {
+		t.Errorf("Contao-Spalte sollte nicht mehr in der Übersicht stehen")
+	}
+	if !strings.Contains(b, "lv warn") && !strings.Contains(b, "lv crit") {
+		t.Errorf("TLS/Backup werden nicht eingefärbt")
+	}
+}

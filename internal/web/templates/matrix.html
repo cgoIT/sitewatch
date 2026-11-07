@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sitewatch – {{.Matrix.Title}}</title>{{template "css"}}</head>
+<body>{{template "top" .Active}}
+<main>
+{{template "filter" .}}
+<section class="card">
+  <h2>{{.Matrix.Title}} <span class="muted" style="font-weight:400">· Stand {{.Now}}</span></h2>
+  <div class="scroll"><table class="matrix">
+    <thead><tr><th>Site</th>{{range .Matrix.Heads}}<th>{{.}}</th>{{end}}</tr></thead>
+    <tbody>{{range .Matrix.Rows}}
+    <tr><td>{{if .Reported}}<a href="/sites/{{.ID}}" style="font-weight:500;text-decoration:none">{{.Name}}</a>{{else}}<span style="font-weight:500">{{.Name}}</span>{{end}}</td>{{range $i, $c := .Cells}}{{with $c}}<td class="mono cell {{.Level}}" data-label="{{index $.Matrix.Heads $i}}">{{.Text}}{{with .Trend}} <span class="tr {{.Class}}" title="{{.Title}}">{{.Text}}</span>{{end}}</td>{{end}}{{end}}</tr>
+    {{else}}<tr><td colspan="99" class="muted">Keine Site passt zum Filter.</td></tr>
+    {{end}}</tbody>
+  </table></div>
+</section>
+</main>{{template "foot"}}</body></html>
+{{define "filter"}}
+<form class="hist" method="get" action="{{.Path}}" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0">
+  <input type="search" name="q" value="{{.Filter.Q}}" placeholder="Site suchen" maxlength="100" aria-label="Site suchen">
+  <select name="status" aria-label="Status"><option value="">alle Status</option><option value="problems"{{if eq .Filter.Status "problems"}} selected{{end}}>Warnung und Kritisch</option><option value="crit"{{if eq .Filter.Status "crit"}} selected{{end}}>nur Kritisch</option></select>
+  <select name="kind" aria-label="Art"><option value="">alle Arten</option>{{range kinds}}<option value="{{.}}"{{if eq . $.Filter.Kind}} selected{{end}}>{{.}}</option>{{end}}</select>
+  <button type="submit">Filtern</button>{{if .Filter.Active}}<a href="{{.Path}}">Zurücksetzen</a>{{end}}
+</form>
+{{end}}
