@@ -30,7 +30,11 @@ type claims struct {
 	Email  string   `json:"email,omitempty"`
 	Groups []string `json:"groups,omitempty"`
 	Exp    int64    `json:"exp"`
+	Iat    int64    `json:"iat,omitempty"` // Zeitpunkt des Logins; bleibt bei der Verlängerung erhalten
 }
+
+// maxAge ist die absolute Obergrenze der Sitzung ab dem Login, trotz gleitender Verlängerung.
+const maxAge = 90 * 24 * time.Hour
 
 // NewSessions verlangt einen Schlüssel von mindestens 32 Byte. secure setzt das Secure-Attribut (immer true außer lokaler Entwicklung).
 func NewSessions(key []byte, ttl time.Duration, secure bool) (*Sessions, error) {
@@ -50,8 +54,10 @@ func (s *Sessions) sign(payload string) string {
 }
 
 // Set legt die Sitzung für id an.
-func (s *Sessions) Set(w http.ResponseWriter, id Identity) {
-	b, _ := json.Marshal(claims{Sub: id.Subject, Email: id.Email, Groups: id.Groups, Exp: s.Now().Add(s.ttl).Unix()})
+func (s *Sessions) Set(w http.ResponseWriter, id Identity) { s.set(w, id, s.Now().Unix()) }
+
+func (s *Sessions) set(w http.ResponseWriter, id Identity, iat int64) {
+	b, _ := json.Marshal(claims{Sub: id.Subject, Email: id.Email, Groups: id.Groups, Exp: s.Now().Add(s.ttl).Unix(), Iat: iat})
 	p := base64.RawURLEncoding.EncodeToString(b)
 	http.SetCookie(w, &http.Cookie{
 		Name: sessionCookie, Value: p + "." + s.sign(p), Path: "/",
@@ -66,30 +72,43 @@ func (s *Sessions) Clear(w http.ResponseWriter) {
 
 // Get liefert die Identität, wenn das Cookie vorhanden, unverfälscht und nicht abgelaufen ist.
 func (s *Sessions) Get(r *http.Request) (Identity, bool) {
+	id, _, ok := s.get(r)
+	return id, ok
+}
+
+func (s *Sessions) get(r *http.Request) (Identity, claims, bool) {
 	c, err := r.Cookie(sessionCookie)
 	if err != nil {
-		return Identity{}, false
+		return Identity{}, claims{}, false
 	}
 	p, sig, ok := strings.Cut(c.Value, ".")
 	if !ok || !hmac.Equal([]byte(sig), []byte(s.sign(p))) {
-		return Identity{}, false
+		return Identity{}, claims{}, false
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(p)
 	var cl claims
-	if err != nil || json.Unmarshal(raw, &cl) != nil || cl.Sub == "" || s.Now().Unix() >= cl.Exp {
-		return Identity{}, false
+	if err != nil || json.Unmarshal(raw, &cl) != nil || cl.Sub == "" || s.Now().Unix() >= cl.Exp || (cl.Iat > 0 && s.Now().Sub(time.Unix(cl.Iat, 0)) > maxAge) {
+		return Identity{}, claims{}, false
 	}
 	id := Identity{Subject: cl.Sub, Email: cl.Email, Groups: cl.Groups}
 	if s.Allow != nil && !s.Allow(id) {
-		return Identity{}, false
+		return Identity{}, claims{}, false
 	}
-	return id, true
+	return id, cl, true
 }
 
 // Require lässt nur angemeldete Benutzer durch; sonst Weiterleitung auf /login (GET) bzw. 401.
 func (s *Sessions) Require(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := s.Get(r); ok {
+		if id, cl, ok := s.get(r); ok {
+			// Gleitende Laufzeit: Wer die Seite nutzt, bleibt angemeldet (höchstens maxAge ab dem Login). Höchstens einmal je Stunde neu setzen.
+			if time.Unix(cl.Exp, 0).Sub(s.Now()) < s.ttl-time.Hour {
+				iat := cl.Iat
+				if iat == 0 { // Cookie aus der Zeit vor dem Höchstalter
+					iat = s.Now().Unix()
+				}
+				s.set(w, id, iat)
+			}
 			w.Header().Set("Cache-Control", "private, no-store")
 			next.ServeHTTP(w, r)
 			return

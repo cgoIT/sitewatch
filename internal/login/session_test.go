@@ -125,3 +125,76 @@ func TestLogoutClearsCookieWithoutRedirect(t *testing.T) {
 		t.Error("Cookie nicht gelöscht")
 	}
 }
+
+// Wer die Seite nutzt, bleibt angemeldet: Require verlängert das Cookie, aber nicht bei jedem Aufruf.
+func TestSessionGleitendeLaufzeit(t *testing.T) {
+	s, now := newSessions(t)
+	s.ttl = 30 * 24 * time.Hour
+	c := issue(s)
+	h := s.Require(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, reqWith(c))
+	if len(rec.Result().Cookies()) != 0 {
+		t.Error("direkt nach dem Login darf nicht erneut gesetzt werden")
+	}
+	*now = now.Add(10 * 24 * time.Hour)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, reqWith(c))
+	cs := rec.Result().Cookies()
+	if len(cs) != 1 {
+		t.Fatal("Cookie nicht verlängert")
+	}
+	*now = now.Add(25 * 24 * time.Hour) // alt wäre abgelaufen (35 Tage), das verlängerte gilt noch
+	if _, ok := s.Get(reqWith(c)); ok {
+		t.Error("altes Cookie sollte abgelaufen sein")
+	}
+	if _, ok := s.Get(reqWith(cs[0])); !ok {
+		t.Error("verlängertes Cookie sollte gelten")
+	}
+}
+
+// Höchstalter ab dem Login, abgelaufene Cookies werden nicht verlängert, entzogene Rechte wirken auch nach einer Verlängerung.
+func TestSessionHoechstalterUndAllow(t *testing.T) {
+	s, now := newSessions(t)
+	s.ttl = 30 * 24 * time.Hour
+	c := issue(s)
+	h := s.Require(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	for i := 0; i < 7; i++ { // alle 12 Tage genutzt (84 Tage): gleitend verlängert
+		*now = now.Add(12 * 24 * time.Hour)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, reqWith(c))
+		if cs := rec.Result().Cookies(); len(cs) == 1 {
+			c = cs[0]
+		}
+	}
+	if _, ok := s.Get(reqWith(c)); !ok {
+		t.Fatal("nach 84 Tagen mit Nutzung muss die Sitzung gelten")
+	}
+	*now = now.Add(12 * 24 * time.Hour) // 96 Tage seit dem Login
+	if _, ok := s.Get(reqWith(c)); ok {
+		t.Error("Höchstalter überschritten, Sitzung gilt trotzdem")
+	}
+
+	s2, now2 := newSessions(t)
+	s2.ttl = 30 * 24 * time.Hour
+	old := issue(s2)
+	*now2 = now2.Add(31 * 24 * time.Hour)
+	rec := httptest.NewRecorder()
+	s2.Require(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})).ServeHTTP(rec, reqWith(old))
+	if rec.Code != http.StatusFound || len(rec.Result().Cookies()) != 0 {
+		t.Errorf("abgelaufen: %d, Cookies %d", rec.Code, len(rec.Result().Cookies()))
+	}
+
+	s3, now3 := newSessions(t)
+	s3.ttl = 30 * 24 * time.Hour
+	c3 := issue(s3)
+	*now3 = now3.Add(10 * 24 * time.Hour)
+	rec = httptest.NewRecorder()
+	s3.Require(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})).ServeHTTP(rec, reqWith(c3))
+	renewed := rec.Result().Cookies()[0]
+	s3.Allow = func(Identity) bool { return false }
+	if _, ok := s3.Get(reqWith(renewed)); ok {
+		t.Error("entzogene Rechte wirken nach der Verlängerung nicht")
+	}
+}
