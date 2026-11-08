@@ -32,6 +32,7 @@
     <label class="chk"><input type="checkbox" name="s{{.N}}_host" value="1"{{if .Host}} checked{{end}}> Host-Infos mit erfassen</label>
     <label class="chk"><input type="checkbox" name="s{{.N}}_no_nginx" value="1"{{if .NoNginx}} checked{{end}}> hat keinen nginx</label>
     <label class="chk"><input type="checkbox" name="s{{.N}}_no_mariadb" value="1"{{if .NoMariaDB}} checked{{end}}> hat keine Datenbank</label>
+    <label class="chk"><input type="checkbox" name="s{{.N}}_no_smart" value="1"{{if .NoSMART}} checked{{end}}> keine SMART-Abfrage (VM)</label>
     </div></div>
   {{if .ID}}<div class="grp"><label class="chk"><input type="checkbox" name="s{{.N}}_delete" value="1"> Site entfernen</label></div>{{end}}
 </fieldset>{{end}}

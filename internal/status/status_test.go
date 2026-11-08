@@ -97,3 +97,45 @@ func TestEvaluateUptime(t *testing.T) {
 		}
 	}
 }
+
+func TestEvaluateSMART(t *testing.T) {
+	now := time.Now()
+	f, tr, n := false, true, 3
+	r := &report.Report{Site: report.Site{ID: "a", Kind: "host"}, Host: report.Host{Disks: []report.Disk{{Device: "/dev/sda", Passed: &tr, BadSectors: &n}}}}
+	if got := Evaluate(r, now, now, DefaultConfig()).Level; got != Warn {
+		t.Errorf("defekte Sektoren: %v, erwartet Warn", got)
+	}
+	r.Host.Disks[0].Passed = &f
+	if got := Evaluate(r, now, now, DefaultConfig()).Level; got != Crit {
+		t.Errorf("SMART failed: %v, erwartet Crit", got)
+	}
+}
+
+func TestEvaluateRAID(t *testing.T) {
+	r := base()
+	r.Host.Raids = []report.Raid{{Name: "md0", Level: "raid1", Total: 2, Active: 2}}
+	if got := Evaluate(r, now, now, DefaultConfig()).Level; got != OK {
+		t.Errorf("gesund: %v", got)
+	}
+	r.Host.Raids[0].Failed = 1 // Ersatzplatte ist eingesprungen
+	if got := Evaluate(r, now, now, DefaultConfig()).Level; got != Warn {
+		t.Errorf("defektes Mitglied: %v, erwartet Warn", got)
+	}
+	r.Host.Raids[0].Active = 1
+	if got := Evaluate(r, now, now, DefaultConfig()).Level; got != Crit {
+		t.Errorf("degradiert: %v, erwartet Crit", got)
+	}
+}
+
+func TestEvaluateDiskRaidEdgeCases(t *testing.T) {
+	r := base()
+	r.Host.Disks = []report.Disk{{Device: "/dev/sda"}}                                              // keine Daten: kein Befund
+	r.Host.Raids = []report.Raid{{Name: "md0", Level: "raid1", Total: 2, Active: 2, Syncing: true}} // Prüfung läuft: ok
+	if got := Evaluate(r, now, now, DefaultConfig()).Level; got != OK {
+		t.Errorf("keine Daten bzw. Prüfung: %v, erwartet OK", got)
+	}
+	r.Host.Raids[0] = report.Raid{Name: "md0", Inactive: true}
+	if got := Evaluate(r, now, now, DefaultConfig()).Level; got != Crit {
+		t.Errorf("inaktiv: %v, erwartet Crit", got)
+	}
+}

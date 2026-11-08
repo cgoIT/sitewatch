@@ -80,6 +80,7 @@ type Bootstrap struct {
 	Roots          []string // erlaubte Verzeichnisse für Pfade aus der Ferne
 	Composer, PHP  string
 	Nginx, MariaDB string
+	Smartctl       string
 	// Actions sind die Aufträge, die dieser Agent ausführen darf (leer = der Auftragskanal ist aus, der Agent fragt nie danach).
 	Actions []string
 }
@@ -96,6 +97,7 @@ type bootstrapFile struct {
 	PHP       string   `json:"php"`
 	Nginx     string   `json:"nginx"`
 	MariaDB   string   `json:"mariadb"`
+	Smartctl  string   `json:"smartctl"`
 	Actions   []string `json:"actions"`
 }
 
@@ -144,13 +146,13 @@ func LoadBootstrap(path string) (Bootstrap, error) {
 		return Bootstrap{}, err
 	}
 	return Bootstrap{Sitewatch: f.Sitewatch, Agent: f.Agent, Token: tok, PublicKey: pub, State: f.State, Roots: f.Roots,
-		Composer: f.Composer, PHP: f.PHP, Nginx: f.Nginx, MariaDB: f.MariaDB, Actions: f.Actions}, nil
+		Composer: f.Composer, PHP: f.PHP, Nginx: f.Nginx, MariaDB: f.MariaDB, Smartctl: f.Smartctl, Actions: f.Actions}, nil
 }
 
 // Config macht aus der Fernkonfiguration die Konfiguration des Agenten; alle Sites melden mit dem Token des Agenten.
 func (b Bootstrap) Config(r Remote) Config {
 	c := Config{Sitewatch: b.Sitewatch, Interval: 5 * time.Minute, Spool: filepath.Join(b.State, "spool"),
-		Composer: b.Composer, PHP: b.PHP, Nginx: b.Nginx, MariaDB: b.MariaDB, Sites: append([]Site(nil), r.Sites...)}
+		Composer: b.Composer, PHP: b.PHP, Nginx: b.Nginx, MariaDB: b.MariaDB, Smartctl: b.Smartctl, Sites: append([]Site(nil), r.Sites...)}
 	if d, err := time.ParseDuration(r.Interval); err == nil && d >= MinInterval {
 		c.Interval = d
 	}

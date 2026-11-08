@@ -62,6 +62,7 @@ func TestLoadRejects(t *testing.T) {
 		"gleiches Token":  `{"sitewatch":"https://c.example","sites":[{"id":"a","kind":"host","token":"t"},{"id":"b","kind":"host","token":" t "}]}`,
 		"Restdaten":       `{"sitewatch":"https://c.example","sites":[{"id":"h","kind":"host","token":"t"}]} {}`,
 		"nginx true":      `{"sitewatch":"https://c.example","sites":[{"id":"h","kind":"host","token":"t","nginx":true}]}`,
+		"smart true":      `{"sitewatch":"https://c.example","sites":[{"id":"h","kind":"host","token":"t","smart":true}]}`,
 		"env-Name":        `{"sitewatch":"https://c.example","sites":[{"id":"h","kind":"host","token":"t","env":{"A=B":"x"}}]}`,
 	}
 	for name, content := range cases {

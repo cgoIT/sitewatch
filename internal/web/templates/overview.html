@@ -18,7 +18,7 @@
     <tbody>
     {{range .Rows}}
     <tr>
-      <td>{{template "kindicon" .Kind}}{{if .Reported}}<a href="/sites/{{.ID}}" style="font-weight:500;text-decoration:none">{{.Name}}</a>{{else}}<span style="font-weight:500">{{.Name}}</span>{{end}}<div class="sub">{{.URL}}</div>
+      <td>{{template "kindicon" .Kind}}{{if .Fav}}<img class="fav" src="/sites/{{.ID}}/icon?v={{.Fav}}" width="16" height="16" alt="">{{end}}{{if .Reported}}<a href="/sites/{{.ID}}" style="font-weight:500;text-decoration:none">{{.Name}}</a>{{else}}<span style="font-weight:500">{{.Name}}</span>{{end}}<div class="sub">{{.URL}}</div>
         {{if .Reasons}}<ul class="reasons">{{range .Reasons}}<li>{{.}}</li>{{end}}</ul>{{end}}</td>
       <td class="mono" data-label="Updates">{{.Updates}}{{with .UpdatesTrend}} <span class="tr {{.Class}}" title="{{.Title}}">{{.Text}}</span>{{end}}</td><td class="mono" data-label="Fehler 24 h">{{.Errors}}</td>{{if $.UptimeOn}}<td data-label="Erreichbarkeit">{{template "uptimecell" .Up}}</td>{{end}}<td class="mono" data-label="TLS läuft ab"><span class="lvb {{.TLSLevel}}">{{.TLS}}</span></td><td class="mono" data-label="Letztes Backup"><span class="lvb {{.BackupLevel}}">{{.Backup}}</span></td>
       <td data-label="Letzte Meldung">{{.Seen}}</td>
@@ -37,7 +37,7 @@
     <tbody>
     {{range .Hosts}}
     <tr>
-      <td>{{template "kindicon" .Kind}}<a href="/sites/{{.ID}}" style="font-weight:500;text-decoration:none">{{.Name}}</a><div class="sub">{{.URL}}</div>
+      <td>{{template "kindicon" .Kind}}{{if .Fav}}<img class="fav" src="/sites/{{.ID}}/icon?v={{.Fav}}" width="16" height="16" alt="">{{end}}<a href="/sites/{{.ID}}" style="font-weight:500;text-decoration:none">{{.Name}}</a><div class="sub">{{.URL}}</div>
         {{if .Reasons}}<ul class="reasons">{{range .Reasons}}<li>{{.}}</li>{{end}}</ul>{{end}}</td>
       <td class="mono" data-label="Platz frei"><span class="lvb {{.DiskLevel}}">{{.Disk}}</span></td><td class="mono" data-label="Letztes Backup"><span class="lvb {{.BackupLevel}}">{{.Backup}}</span></td><td class="mono" data-label="MariaDB">{{.MariaDB}}</td><td class="mono" data-label="Nginx">{{.Nginx}}</td>
       <td data-label="Letzte Meldung">{{.Seen}}</td>

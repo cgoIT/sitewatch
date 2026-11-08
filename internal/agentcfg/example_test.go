@@ -21,8 +21,12 @@ func TestBootstrapExampleLoads(t *testing.T) {
 	if err := os.WriteFile(p, []byte(s), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := LoadBootstrap(p); err != nil {
-		t.Errorf("Vorlage passt nicht zum Format: %v", err)
+	b2, err := LoadBootstrap(p)
+	if err != nil {
+		t.Fatalf("Vorlage passt nicht zum Format: %v", err)
+	}
+	if b2.Smartctl == "" || b2.Config(Remote{}).Smartctl != b2.Smartctl {
+		t.Errorf("smartctl muss aus der Vorlage in die Konfiguration gelangen: %q", b2.Smartctl)
 	}
 }
 

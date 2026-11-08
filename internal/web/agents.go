@@ -228,7 +228,7 @@ type siteForm struct {
 	N                                                int
 	ID, Name, Kind, URL, Path, BackupDir, BackupGlob string
 	SiteDir, Ignore                                  string
-	Host, NoNginx, NoMariaDB                         bool
+	Host, NoNginx, NoMariaDB, NoSMART                bool
 	Actions                                          []actionBox // nur bei bestehenden Sites und mit Aufträgen
 }
 
@@ -241,7 +241,7 @@ type actionBox struct {
 func (s *Server) toForm(i int, st agentcfg.Site, agent string) siteForm {
 	f := siteForm{N: i, ID: st.ID, Name: st.Name, Kind: st.Kind, URL: st.URL, Path: st.Path, BackupDir: st.BackupDir,
 		BackupGlob: st.BackupGlob, SiteDir: st.Env["SITE_DIR"], Ignore: strings.Join(st.IgnoreUpdates, "\n"), Host: st.Host,
-		NoNginx: st.Nginx != nil && !*st.Nginx, NoMariaDB: st.MariaDB != nil && !*st.MariaDB}
+		NoNginx: st.Nginx != nil && !*st.Nginx, NoMariaDB: st.MariaDB != nil && !*st.MariaDB, NoSMART: st.SMART != nil && !*st.SMART}
 	if s.jobsUI() && st.Kind != "host" {
 		ann, _ := s.announced(agent)
 		for _, act := range jobs.Actions {
@@ -319,6 +319,9 @@ func parseSites(r *http.Request) agentcfg.Remote {
 		}
 		if f("no_mariadb") != "" {
 			st.MariaDB = &no
+		}
+		if f("no_smart") != "" {
+			st.SMART = &no
 		}
 		for _, l := range strings.Split(r.FormValue(fmt.Sprintf("s%d_ignore", i)), "\n") {
 			if l = strings.TrimSpace(l); l != "" {

@@ -51,6 +51,8 @@ type Prober struct {
 	Now      func() time.Time
 	// Uptime (optional) nimmt die Ergebnisse der Erreichbarkeitsprüfung auf (siehe RunUptime); nil = keine Prüfung.
 	Uptime store.Uptime
+	// Favicons (optional) nimmt die Symbole der Sites auf (siehe RunFavicons); nil = keine.
+	Favicons store.Favicons
 	// AllowInternal erlaubt Ziele in privaten und lokalen Netzen; nur für Tests.
 	AllowInternal bool
 	tlsConfig     *tls.Config // nur für Tests (selbstsigniertes Zertifikat des Testservers)
@@ -59,7 +61,8 @@ type Prober struct {
 	expires  map[string]time.Time // Site-ID → Ablauf des Zertifikats
 	checked  map[string]time.Time // Site-ID → letzte Zertifikatsprüfung
 	lastPing map[string]time.Time
-	urls     map[string]string // Site-ID → Adresse, für die expires gilt
+	favTry   map[string]time.Time // Site-ID → letzter Versuch, ein Symbol zu holen
+	urls     map[string]string    // Site-ID → Adresse, für die expires gilt
 	info     map[string]Info
 	up       map[string]*upState // Erreichbarkeitsprüfung, nur für aktivierte Sites
 }

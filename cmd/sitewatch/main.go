@@ -151,9 +151,10 @@ func serve(args []string) {
 		go ep.Run(context.Background(), 24*time.Hour)
 	}
 	settings := status.NewSettings(cfg)
-	prober := &probe.Prober{Agents: ags, Store: st, Settings: settings, Now: time.Now, Uptime: st}
+	prober := &probe.Prober{Agents: ags, Store: st, Settings: settings, Now: time.Now, Uptime: st, Favicons: st}
 	go prober.Run(context.Background(), 5*time.Minute)
 	go prober.RunUptime(context.Background())
+	go prober.RunFavicons(context.Background())
 	withUptime := settings.Get()
 	withUptime.Uptime = prober // Evaluate in Oberfläche und Alarm sieht damit „nicht erreichbar“
 	settings.Set(withUptime)
@@ -196,6 +197,7 @@ func serve(args []string) {
 	srv.Settings = settings
 	srv.Probe = prober
 	srv.Uptime = st
+	srv.Favicons = st
 	srv.SaveSettings = func(c status.Config, vals map[string]int) error {
 		if len(vals) == 0 {
 			if err := st.DeleteSetting(thresholdsKey); err != nil {

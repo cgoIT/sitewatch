@@ -12,6 +12,8 @@ description: |
   Nach der Installation /etc/sitewatch-agent/bootstrap.json anlegen (Vorlage unter /usr/share/doc/sitewatch-agent/examples) und den Dienst starten.
 homepage: https://github.com/cgoIT/sitewatch
 license: AGPL-3.0
+recommends:
+  - smartmontools # smartctl für die SMART-Überwachung der Platten (nur host-Einträge)
 contents:
   - dst: /etc/sitewatch-agent
     type: dir

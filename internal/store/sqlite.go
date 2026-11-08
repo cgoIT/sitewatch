@@ -50,7 +50,7 @@ const baseVersion = 1
 
 // migrations: Eintrag i hebt die Datenbank von Version baseVersion+i auf baseVersion+i+1. Jeder läuft in einer eigenen Transaktion
 // zusammen mit dem Setzen der Version, ein Fehler lässt die Datenbank unverändert.
-var migrations = []func(tx *sql.Tx) error{migrateUptime, migratePush}
+var migrations = []func(tx *sql.Tx) error{migrateUptime, migratePush, migrateDiskHealth, migrateFavicon}
 
 // migrate bringt die Datenbank auf die aktuelle Version. Eine neuere Datenbank (Programm zurückgerollt) wird nicht angefasst.
 // Die Version wird je Schritt innerhalb der Transaktion gelesen: Starten zwei Prozesse gleichzeitig, führt nur einer eine Migration aus.
@@ -186,10 +186,10 @@ func (s *SQLite) save(e Entry, level int) error {
 		return err
 	}
 	sm := SampleOf(e, level)
-	if _, err := tx.Exec(`INSERT OR REPLACE INTO samples(site_id, at, level, disk, updates, errors, migrations, cron_age, backup_age, contao, php, mariadb, nginx)
-		VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	if _, err := tx.Exec(`INSERT OR REPLACE INTO samples(site_id, at, level, disk, updates, errors, migrations, cron_age, backup_age, contao, php, mariadb, nginx, bad_sectors, raid_missing)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		id, sm.At.Unix(), sm.Level, nullInt(sm.DiskFreePct), sm.OpenUpdates, sm.Errors, nullInt(sm.PendingMigrations),
-		nullInt(sm.CronAgeSec), nullInt(sm.BackupAgeSec), sm.Contao, sm.PHP, sm.MariaDB, sm.Nginx); err != nil {
+		nullInt(sm.CronAgeSec), nullInt(sm.BackupAgeSec), sm.Contao, sm.PHP, sm.MariaDB, sm.Nginx, nullInt(sm.BadSectors), nullInt(sm.RaidMissing)); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -276,19 +276,20 @@ func (s *SQLite) Days(siteID string) ([]string, error) {
 	return out, rows.Err()
 }
 
-const sampleCols = "at, level, disk, updates, errors, migrations, cron_age, backup_age, contao, php, mariadb, nginx"
+const sampleCols = "at, level, disk, updates, errors, migrations, cron_age, backup_age, contao, php, mariadb, nginx, bad_sectors, raid_missing"
 
 // scanSample liest eine Zeile mit sampleCols; lead nimmt davor stehende Spalten auf (z. B. site_id).
 func scanSample(sc interface{ Scan(...any) error }, lead ...any) (Sample, error) {
 	var sm Sample
 	var at int64
-	var disk, mig, cron, backup sql.NullInt64
-	dest := append(lead, &at, &sm.Level, &disk, &sm.OpenUpdates, &sm.Errors, &mig, &cron, &backup, &sm.Contao, &sm.PHP, &sm.MariaDB, &sm.Nginx)
+	var disk, mig, cron, backup, bad, raid sql.NullInt64
+	dest := append(lead, &at, &sm.Level, &disk, &sm.OpenUpdates, &sm.Errors, &mig, &cron, &backup, &sm.Contao, &sm.PHP, &sm.MariaDB, &sm.Nginx, &bad, &raid)
 	if err := sc.Scan(dest...); err != nil {
 		return sm, err
 	}
 	sm.At = time.Unix(at, 0).UTC()
 	sm.DiskFreePct, sm.PendingMigrations, sm.CronAgeSec, sm.BackupAgeSec = ptr(disk), ptr(mig), ptr(cron), ptr(backup)
+	sm.BadSectors, sm.RaidMissing = ptr(bad), ptr(raid)
 	return sm, nil
 }
 
@@ -315,7 +316,7 @@ func (s *SQLite) History(siteID string, limit int) ([]Sample, error) {
 
 // Baselines liefert je Site den ältesten Punkt ab since (Vergleichswert für Trendpfeile). Sites ohne Punkt fehlen.
 func (s *SQLite) Baselines(since time.Time) (map[string]Sample, error) {
-	rows, err := s.db.Query(`SELECT s.site_id, s.at, s.level, s.disk, s.updates, s.errors, s.migrations, s.cron_age, s.backup_age, s.contao, s.php, s.mariadb, s.nginx
+	rows, err := s.db.Query(`SELECT s.site_id, s.at, s.level, s.disk, s.updates, s.errors, s.migrations, s.cron_age, s.backup_age, s.contao, s.php, s.mariadb, s.nginx, s.bad_sectors, s.raid_missing
 		FROM samples s JOIN (SELECT site_id, MIN(at) m FROM samples WHERE at >= ? GROUP BY site_id) x ON s.site_id = x.site_id AND s.at = x.m`, since.Unix())
 	if err != nil {
 		return nil, err
@@ -371,6 +372,7 @@ func (s *SQLite) DeleteSite(siteID string) error {
 		`DELETE FROM uptime_raw WHERE site_id=?`,
 		`DELETE FROM uptime_day WHERE site_id=?`,
 		`DELETE FROM uptime_site WHERE site_id=?`,
+		`DELETE FROM favicons WHERE site_id=?`,
 	} {
 		if _, err := tx.Exec(q, siteID); err != nil {
 			return err
@@ -426,15 +428,17 @@ func (s *SQLite) Maintain(now time.Time) error {
 		at    int64
 		level int
 		disk  sql.NullInt64
+		bad   sql.NullInt64
+		raid  sql.NullInt64
 	}
 	var old []row
-	rows, err := tx.Query(`SELECT site_id, at, level, disk FROM samples WHERE at < ? ORDER BY site_id, at`, cut30)
+	rows, err := tx.Query(`SELECT site_id, at, level, disk, bad_sectors, raid_missing FROM samples WHERE at < ? ORDER BY site_id, at`, cut30)
 	if err != nil {
 		return err
 	}
 	for rows.Next() {
 		var r row
-		if err := rows.Scan(&r.site, &r.at, &r.level, &r.disk); err != nil {
+		if err := rows.Scan(&r.site, &r.at, &r.level, &r.disk, &r.bad, &r.raid); err != nil {
 			rows.Close()
 			return err
 		}
@@ -466,14 +470,15 @@ func (s *SQLite) Maintain(now time.Time) error {
 		if len(g) < 2 {
 			continue
 		}
-		last, level, disk := g[len(g)-1], 0, sql.NullInt64{}
+		last, level, disk, bad, raid := g[len(g)-1], 0, sql.NullInt64{}, sql.NullInt64{}, sql.NullInt64{}
 		for _, r := range g {
 			level = max(level, r.level)
+			bad, raid = maxNull(bad, r.bad), maxNull(raid, r.raid)
 			if r.disk.Valid && (!disk.Valid || r.disk.Int64 < disk.Int64) {
 				disk = r.disk
 			}
 		}
-		if _, err := tx.Exec(`UPDATE samples SET level=?, disk=? WHERE site_id=? AND at=?`, level, disk, last.site, last.at); err != nil {
+		if _, err := tx.Exec(`UPDATE samples SET level=?, disk=?, bad_sectors=?, raid_missing=? WHERE site_id=? AND at=?`, level, disk, bad, raid, last.site, last.at); err != nil {
 			return err
 		}
 		for _, r := range g[:len(g)-1] {

@@ -9,5 +9,6 @@
   "php": "/usr/share/sitewatch-agent/docker/php-in-docker",
   "nginx": "/usr/share/sitewatch-agent/docker/nginx-in-docker",
   "mariadb": "/usr/share/sitewatch-agent/docker/mariadb-in-docker",
+  "smartctl": "/usr/sbin/smartctl",
   "actions": ["site-status", "site-doctor", "site-validate-config", "contao-snapshot-list", "db-list", "contao-cache-refresh", "contao-filesync", "contao-snapshot", "db-snapshot", "site-restart", "maintenance-off", "maintenance-on", "contao-update"]
 }

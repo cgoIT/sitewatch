@@ -11,8 +11,12 @@ Was das Dashboard zeigt (je Site und für den Server):
 - offene Composer-Updates und Sicherheitshinweise (`composer outdated/audit`), mit Ausschlussregeln
 - letzte Fehler aus den Monolog-Logs, offene Contao-Migrationen, letzter Contao-Cron-Lauf
 - freier Speicherplatz, Alter des letzten Backups, Ablauf des TLS-Zertifikats, Wartungsmodus
+- SMART-Zustand der Platten (nur `host`-Einträge, über `smartctl` aus smartmontools; der Agent braucht Leserechte auf die Geräte, i. d. R. Root): Gesamturteil „failed“ ist kritisch, defekte/umgelagerte Sektoren sind eine Warnung. Fehlt `smartctl`, erscheint ein Problem („Teilweise keine Daten“); auf VMs ohne echte Platten schaltet man die Abfrage je Site ab (siehe „SMART und RAID“ unten)
+- Linux-Software-RAID (mdadm, aus `/proc/mdstat`, nur `host`-Einträge): ein degradierter oder inaktiver Verbund ist kritisch, ein als defekt markiertes Mitglied bei vollständigem Verbund eine Warnung. Hardware-RAID-Controller und ZFS/btrfs sind nicht abgedeckt (einzelne Platten hinter einem Controller nur, wenn `smartctl --scan` sie liefert)
+- Verlauf der defekten Sektoren und der fehlenden RAID-Platten als Kurven (bei verdichteten Punkten gilt das Maximum)
 - Verlauf und Trends (Kurven, Statusband, Tagesstände) und eine Bewertung OK / Warnung / Kritisch
 - Erreichbarkeit und Antwortzeit: Sitewatch ruft die https-Adresse jeder Site regelmäßig auf (Uptime in %, Verlauf je Tag, Latenz)
+- Favicon der Site vor dem Namen in der Übersicht (von Sitewatch geholt, siehe „Favicons“)
 - Alarmierung per E-Mail, wenn eine Site kritisch wird
 - Aufträge aus einer **festen Liste** (z. B. Wartungsmodus, Cache leeren, Snapshot), jeweils mit Freigabe im Dashboard und Live-Ausgabe
 
@@ -107,7 +111,7 @@ Auf dem Server `/etc/sitewatch-agent/bootstrap.json` anlegen (`chmod 600`; Vorla
 
 Dann `systemctl enable --now sitewatch-agent`. Der Agent holt vor jedem Lauf die Konfiguration (Sites, Intervall) signiert vom
 Dashboard; den öffentlichen Schlüssel zeigt `sitewatch pubkey -data /var/lib/sitewatch`. Programme (`composer`, `php`, `nginx`,
-`mariadb`), Token und `roots` bleiben lokal, aus dem Dashboard kommen nur Daten. Fällt das Dashboard aus, arbeitet der Agent
+`mariadb`, `smartctl`), Token und `roots` bleiben lokal, aus dem Dashboard kommen nur Daten. Fällt das Dashboard aus, arbeitet der Agent
 mit der zuletzt geprüften Konfiguration weiter, bis sie abläuft.
 
 Für Server, die ohne Dashboard-Konfiguration laufen sollen, gibt es `sitewatch-agent -config datei.json`
@@ -115,6 +119,23 @@ Für Server, die ohne Dashboard-Konfiguration laufen sollen, gibt es `sitewatch-
 
 **Art einer Site (`kind`):** `contao` (Contao-Konsole, Migrationen, Cron), `php` (sonstige PHP-Site) und `host` (nur
 Servermesswerte: Speicherplatz, nginx, MariaDB; erscheint als eigener Eintrag).
+
+**SMART und RAID (nur `host`-Einträge):** Der Agent fragt die Platten über `smartctl` ab und liest Linux-Software-RAIDs aus
+`/proc/mdstat`. Dafür gilt:
+
+- `smartmontools` muss auf dem Server installiert sein (`apt install smartmontools`), und der Agent braucht Leserechte auf die
+  Geräte. Die mitgelieferten systemd-Units laufen als Root, das genügt. Läuft er unter einem anderen Benutzer, meldet er
+  „SMART nicht lesbar“.
+- Liegt `smartctl` im `PATH` des Agenten, ist nichts einzutragen. Nur bei einem anderen Ort oder einem Wrapper-Skript trägt man den
+  absoluten Pfad als `"smartctl": "/usr/sbin/smartctl"` ein, und zwar **lokal auf dem Server**, nicht im Dashboard: in der
+  `bootstrap.json` (Betrieb mit Dashboard-Konfiguration) bzw. auf oberster Ebene der Datei für `-config` (siehe die Vorlagen unter
+  `/usr/share/doc/sitewatch-agent/examples/`). Wie bei `composer` oder `php` bestimmt nur die lokale Datei, welches Programm der Agent
+  startet; aus dem Dashboard kommen nur Daten.
+- Auf VMs ohne echte Platten gibt es nichts abzufragen, und das fehlende `smartctl` würde als Problem gemeldet. Dort schaltet man die
+  Abfrage je Site ab: im Dashboard unter „Agenten“ das Häkchen „keine SMART-Abfrage (VM)“, in einer lokalen Konfigurationsdatei
+  `"smart": false` an der Site. Das RAID-Lesen bleibt aktiv und meldet nichts, wenn es keinen md-Verbund gibt.
+- Bewertung: SMART „failed“ und ein degradierter oder inaktiver RAID-Verbund sind kritisch, defekte Sektoren und ein als defekt
+  markiertes RAID-Mitglied sind eine Warnung. Hardware-RAID-Controller, ZFS und btrfs sind nicht abgedeckt.
 
 **Updates ausschließen:** `"ignore_updates": ["contao/*:6.*", "vendor/paket"]` je Site. Eine Regel ist `paket-glob` (jedes Update)
 oder `paket-glob:versions-glob`. Treffer bleiben sichtbar („ausgeschlossen"), zählen aber nicht als offenes Update.
@@ -142,6 +163,23 @@ Hat ein Contao-Bundle-Agent eine Seiten-URL (https), prüft Sitewatch alle sechs
 (es ergänzt den Report, der es nicht kennt) und ruft die Seite einmal auf, wenn der letzte Report älter ist als der Wert „Weckruf an die
 Seite“ unter „Einstellungen“ (Standard 90 Minuten), höchstens alle 15 Minuten. Das weckt den Contao-Cron bei Seiten mit wenig Besuchern.
 Der Aufruf ist ein einfaches GET ohne Daten; Weiterleitungen und Ziele in privaten Netzen werden nicht verfolgt. Ohne URL passiert nichts.
+
+## Favicons
+
+Die Übersicht zeigt vor dem Namen einer Site ihr Favicon, sofern die Seite eins bereitstellt. Die Oberfläche lädt nie fremde Bilder
+(CSP `img-src 'self'`, und der Browser würde die IP des Betrachters an die Kundenseite senden): Sitewatch holt das Symbol selbst, speichert
+es in der Datenbank und liefert es unter `/sites/<id>/icon` hinter dem Login aus.
+
+- **Quelle:** die https-Adresse aus der Agent-Konfiguration (nie aus dem Report). Gesucht wird in `<link rel="icon">` und
+  `<link rel="shortcut icon">` der Startseite (die ersten 64 KB), danach unter `/favicon.ico`. `apple-touch-icon` zählt nicht.
+- **Schranken:** wie beim Ping (nur https, 10 s, keine internen Ziele), mit einer Ausnahme: **Weiterleitungen sind erlaubt**, höchstens 3, nur
+  nach https und nur innerhalb derselben Site (gleicher Host und Port, ein `www.` davor zählt nicht). Symbole auf einem anderen Host
+  (z. B. einem CDN) werden nicht geholt.
+- **Bild:** höchstens 128 KB. Das Format (PNG, ICO, GIF, JPEG) erkennt Sitewatch am Inhalt, nicht am Header der Fremdseite. SVG wird nicht
+  übernommen, weil es Skripte enthalten kann. Die Auslieferung setzt `nosniff` und eine CSP mit `sandbox`.
+- **Takt:** fällig ist es ohne Symbol sofort und danach alle 6 Stunden, mit Symbol alle 24 Stunden. Ändert sich die Adresse der Site, gilt das
+  alte Symbol nicht mehr. Gibt es keins, bleibt die Zeile wie bisher. Es ist nichts einzustellen.
+- Die Symbole stehen nicht im Export der Konfiguration; sie werden nach einem Import neu geholt.
 
 ## Erreichbarkeit (Ping-Modus)
 

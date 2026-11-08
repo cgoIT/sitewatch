@@ -348,3 +348,38 @@ func TestMassDownBanner(t *testing.T) {
 		t.Error("Hinweis ohne Massenausfall")
 	}
 }
+
+func TestSiteIcon(t *testing.T) {
+	srv, tok, now := setup(t)
+	st := srv.Store.(*store.SQLite)
+	srv.Favicons = st
+	post(srv, tok, report.Report{Schema: 1, CollectedAt: now, Site: report.Site{ID: "kunde-c", Name: "Kunde C", Kind: "php"}})
+	get := func(path string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+		return w
+	}
+	if w := get("/sites/kunde-c/icon"); w.Code != http.StatusNotFound {
+		t.Errorf("ohne Symbol: %d", w.Code)
+	}
+	if strings.Contains(get("/").Body.String(), `class="fav"`) {
+		t.Error("ohne Symbol darf kein Bild erscheinen")
+	}
+	png := append([]byte("\x89PNG\r\n\x1a\n"), 1, 2, 3)
+	if err := st.SetFavicon("kunde-c", store.Favicon{Data: png, Type: "image/png", URL: "https://x.example", Fetched: now}); err != nil {
+		t.Fatal(err)
+	}
+	w := get("/sites/kunde-c/icon")
+	if w.Code != 200 || w.Header().Get("Content-Type") != "image/png" || w.Header().Get("X-Content-Type-Options") != "nosniff" ||
+		!strings.Contains(w.Header().Get("Content-Security-Policy"), "sandbox") || !bytes.Equal(w.Body.Bytes(), png) {
+		t.Errorf("Symbol: %d %v", w.Code, w.Header())
+	}
+	if !strings.Contains(get("/").Body.String(), `src="/sites/kunde-c/icon?v=`) {
+		t.Error("Übersicht zeigt das Symbol nicht")
+	}
+	for _, id := range []string{"unbekannt", "GROSS", "a.b"} {
+		if w := get("/sites/" + id + "/icon"); w.Code != http.StatusNotFound {
+			t.Errorf("%s: %d", id, w.Code)
+		}
+	}
+}
