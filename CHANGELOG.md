@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.3.0](https://github.com/cgoIT/sitewatch/compare/v1.2.0...v1.3.0) (2026-11-08)
+
+
+### Features
+
+* **host:** SMART- und RAID-Überwachung für Host-Agents ([aee8e40](https://github.com/cgoIT/sitewatch/commit/aee8e40c5bb8f6f25eaa028d27fcf1b8c2ea1528))
+* SMART-/RAID-Überwachung für Host-Agents und Favicons ([b959a0d](https://github.com/cgoIT/sitewatch/commit/b959a0df9f159332c0341d4f8235026c5942d841))
+* **web:** Favicon der Sites in der Übersicht ([732131f](https://github.com/cgoIT/sitewatch/commit/732131f9d5e0db3ef6130eaa2f0354ccb1a1b70d))
+
 ## [1.2.0](https://github.com/cgoIT/sitewatch/compare/v1.1.0...v1.2.0) (2026-11-08)
 
 
