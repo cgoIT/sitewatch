@@ -57,7 +57,9 @@ type Server struct {
 	Who  func(*http.Request) string
 	// Uptime (optional) liefert die Messwerte der Erreichbarkeitsprüfung; nil = keine Anzeige.
 	Uptime store.Uptime
-	hub    hub
+	// Favicons (optional) liefert die geholten Symbole der Sites (Route /sites/{id}/icon, Anzeige in der Übersicht); nil = keine.
+	Favicons store.Favicons
+	hub      hub
 
 	annMu sync.Mutex
 	ann   map[string]announce
@@ -99,6 +101,9 @@ func (s *Server) Handler() http.Handler {
 	ui.HandleFunc("POST /sites/{id}/delete", s.siteDelete)
 	if s.Uptime != nil {
 		ui.HandleFunc("POST /sites/{id}/uptime", s.uptimeSet)
+	}
+	if s.Favicons != nil {
+		ui.HandleFunc("GET /sites/{id}/icon", s.siteIcon)
 	}
 	if s.TestMail != nil {
 		ui.HandleFunc("POST /alert-test", s.testMail)
@@ -192,8 +197,9 @@ type row struct {
 	Level, Label, Icon                 string
 	Reasons                            []string
 	Maintenance                        bool
-	Reported                           bool // es gibt einen Report, nur dann gibt es eine Detailseite
-	Orphan                             bool // Reports sind da, aber kein Agent ist mehr für die Site eingetragen
+	Fav                                int64 // Abrufzeit des Symbols (Unix), 0 = keins; hängt als ?v= an der Adresse, damit ein neues Symbol sofort erscheint
+	Reported                           bool  // es gibt einen Report, nur dann gibt es eine Detailseite
+	Orphan                             bool  // Reports sind da, aber kein Agent ist mehr für die Site eingetragen
 	UpdatesTrend                       *arrow
 	Up                                 uptimeView
 	TLS, TLSLevel, Backup, BackupLevel string // "–" und Level "ok", wenn nicht gemeldet
@@ -288,6 +294,17 @@ func (s *Server) rows(base map[string]store.Sample) ([]row, tiles, error) {
 	if views := s.uptimeViews(30); views != nil {
 		for i := range rows {
 			rows[i].Up = views[rows[i].ID]
+		}
+	}
+	if s.Favicons != nil {
+		if meta, err := s.Favicons.FaviconMeta(); err != nil {
+			log.Printf("favicon: %v", err)
+		} else {
+			for i := range rows {
+				if m, ok := meta[rows[i].ID]; ok {
+					rows[i].Fav = m.Fetched.Unix()
+				}
+			}
 		}
 	}
 	rank := map[string]int{"crit": 0, "warn": 1, "ok": 2}
@@ -590,4 +607,31 @@ func (s *Server) testMail(w http.ResponseWriter, r *http.Request) {
 func (s *Server) massDown() bool {
 	m, ok := s.cfg().Uptime.(interface{ MassDown() bool })
 	return ok && m.MassDown()
+}
+
+// siteIcon liefert das geholte Symbol einer Site. Das Bild wurde beim Holen am Inhalt erkannt; trotzdem gilt: kein Sniffing, keine Ausführung.
+func (s *Server) siteIcon(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !report.ValidID(id) {
+		http.NotFound(w, r)
+		return
+	}
+	f, ok, err := s.Favicons.GetFavicon(id)
+	if err != nil {
+		log.Printf("favicon: %v", err)
+		http.Error(w, "interner Fehler", http.StatusInternalServerError)
+		return
+	}
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	h := w.Header()
+	h.Set("Content-Type", f.Type)
+	h.Set("X-Content-Type-Options", "nosniff")
+	h.Set("Content-Security-Policy", "default-src 'none'; sandbox")
+	h.Set("Cache-Control", "private, max-age=86400")
+	if _, err := w.Write(f.Data); err != nil {
+		log.Printf("favicon: %q senden: %v", id, err)
+	}
 }

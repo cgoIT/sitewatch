@@ -16,6 +16,7 @@ Was das Dashboard zeigt (je Site und für den Server):
 - Verlauf der defekten Sektoren und der fehlenden RAID-Platten als Kurven (bei verdichteten Punkten gilt das Maximum)
 - Verlauf und Trends (Kurven, Statusband, Tagesstände) und eine Bewertung OK / Warnung / Kritisch
 - Erreichbarkeit und Antwortzeit: Sitewatch ruft die https-Adresse jeder Site regelmäßig auf (Uptime in %, Verlauf je Tag, Latenz)
+- Favicon der Site vor dem Namen in der Übersicht (von Sitewatch geholt, siehe „Favicons“)
 - Alarmierung per E-Mail, wenn eine Site kritisch wird
 - Aufträge aus einer **festen Liste** (z. B. Wartungsmodus, Cache leeren, Snapshot), jeweils mit Freigabe im Dashboard und Live-Ausgabe
 
@@ -162,6 +163,23 @@ Hat ein Contao-Bundle-Agent eine Seiten-URL (https), prüft Sitewatch alle sechs
 (es ergänzt den Report, der es nicht kennt) und ruft die Seite einmal auf, wenn der letzte Report älter ist als der Wert „Weckruf an die
 Seite“ unter „Einstellungen“ (Standard 90 Minuten), höchstens alle 15 Minuten. Das weckt den Contao-Cron bei Seiten mit wenig Besuchern.
 Der Aufruf ist ein einfaches GET ohne Daten; Weiterleitungen und Ziele in privaten Netzen werden nicht verfolgt. Ohne URL passiert nichts.
+
+## Favicons
+
+Die Übersicht zeigt vor dem Namen einer Site ihr Favicon, sofern die Seite eins bereitstellt. Die Oberfläche lädt nie fremde Bilder
+(CSP `img-src 'self'`, und der Browser würde die IP des Betrachters an die Kundenseite senden): Sitewatch holt das Symbol selbst, speichert
+es in der Datenbank und liefert es unter `/sites/<id>/icon` hinter dem Login aus.
+
+- **Quelle:** die https-Adresse aus der Agent-Konfiguration (nie aus dem Report). Gesucht wird in `<link rel="icon">` und
+  `<link rel="shortcut icon">` der Startseite (die ersten 64 KB), danach unter `/favicon.ico`. `apple-touch-icon` zählt nicht.
+- **Schranken:** wie beim Ping (nur https, 10 s, keine internen Ziele), mit einer Ausnahme: **Weiterleitungen sind erlaubt**, höchstens 3, nur
+  nach https und nur innerhalb derselben Site (gleicher Host und Port, ein `www.` davor zählt nicht). Symbole auf einem anderen Host
+  (z. B. einem CDN) werden nicht geholt.
+- **Bild:** höchstens 128 KB. Das Format (PNG, ICO, GIF, JPEG) erkennt Sitewatch am Inhalt, nicht am Header der Fremdseite. SVG wird nicht
+  übernommen, weil es Skripte enthalten kann. Die Auslieferung setzt `nosniff` und eine CSP mit `sandbox`.
+- **Takt:** fällig ist es ohne Symbol sofort und danach alle 6 Stunden, mit Symbol alle 24 Stunden. Ändert sich die Adresse der Site, gilt das
+  alte Symbol nicht mehr. Gibt es keins, bleibt die Zeile wie bisher. Es ist nichts einzustellen.
+- Die Symbole stehen nicht im Export der Konfiguration; sie werden nach einem Import neu geholt.
 
 ## Erreichbarkeit (Ping-Modus)
 
