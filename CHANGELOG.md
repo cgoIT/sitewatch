@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.0](https://github.com/cgoIT/sitewatch/compare/v1.1.0...v1.2.0) (2026-11-08)
+
+
+### Features
+
+* **login:** gleitende Sitzung mit 30 Tagen und Höchstalter von 90 Tagen ([93b09bc](https://github.com/cgoIT/sitewatch/commit/93b09bc800b942dd0f325513e11323bc69645cad))
+* **push:** Web-Push für Alarme auf Mobilgeräten ([09c045d](https://github.com/cgoIT/sitewatch/commit/09c045d3250e3c379f410227bc991306ff12b1c6))
+
 ## [1.1.0](https://github.com/cgoIT/sitewatch/compare/v1.0.0...v1.1.0) (2026-11-07)
 
 
