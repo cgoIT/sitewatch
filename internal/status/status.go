@@ -131,6 +131,28 @@ func Evaluate(r *report.Report, receivedAt, now time.Time, cfg Config) Result {
 			raise(Warn, "Nur noch %d %% Speicherplatz frei", *p)
 		}
 	}
+	for _, d := range r.Host.Disks {
+		switch {
+		case d.Passed != nil && !*d.Passed:
+			raise(Crit, "Platte %s: SMART meldet Fehler, Ausfall droht", d.Device)
+		case d.BadSectors != nil && *d.BadSectors > 0:
+			raise(Warn, "Platte %s: %d defekte/umgelagerte Sektoren", d.Device, *d.BadSectors)
+		}
+	}
+	for _, a := range r.Host.Raids {
+		switch {
+		case a.Inactive:
+			raise(Crit, "RAID %s ist inaktiv", a.Name)
+		case a.Missing() > 0:
+			s := ""
+			if a.Syncing {
+				s = ", Wiederherstellung läuft"
+			}
+			raise(Crit, "RAID %s (%s) ist degradiert: %d von %d Platten aktiv%s", a.Name, a.Level, a.Active, a.Total, s)
+		case a.Failed > 0:
+			raise(Warn, "RAID %s: %d Platte(n) als defekt markiert", a.Name, a.Failed)
+		}
+	}
 	if t := r.Site.CronLastRun; t != nil {
 		if l := CronLevel(*t, now, cfg); l > OK {
 			raise(l, "Contao-Cron zuletzt vor %s gelaufen", Duration(now.Sub(*t)))

@@ -66,6 +66,8 @@ var metrics = []metric{
 	{"Offene Updates", func(s store.Sample) (float64, bool) { return float64(s.OpenUpdates), true }, func(v float64) string { return fmt.Sprintf("%.0f", v) }, 0, false, true},
 	{"Fehler (24 Std.)", func(s store.Sample) (float64, bool) { return float64(s.Errors), true }, func(v float64) string { return fmt.Sprintf("%.0f", v) }, 0, false, true},
 	{"Alter des letzten Cron-Laufs", func(s store.Sample) (float64, bool) { return hours(s.CronAgeSec) }, hoursText, 0, false, false},
+	{"Defekte Sektoren (SMART)", func(s store.Sample) (float64, bool) { return intVal(s.BadSectors) }, func(v float64) string { return fmt.Sprintf("%.0f", v) }, 0, false, false},
+	{"RAID: fehlende Platten", func(s store.Sample) (float64, bool) { return intVal(s.RaidMissing) }, func(v float64) string { return fmt.Sprintf("%.0f", v) }, 0, false, false},
 	{"Alter des letzten Backups", func(s store.Sample) (float64, bool) { return hours(s.BackupAgeSec) }, hoursText, 0, false, false},
 }
 

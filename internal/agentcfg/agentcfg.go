@@ -37,6 +37,7 @@ type Site struct {
 	Actions   []string `json:"actions,omitempty"`
 	Nginx     *bool    `json:"nginx,omitempty"`
 	MariaDB   *bool    `json:"mariadb,omitempty"`
+	SMART     *bool    `json:"smart,omitempty"` // nur false erlaubt = keine SMART-Abfrage (z. B. VM); wirkt nur bei Host-Infos
 	Token     string   `json:"token,omitempty"`
 	TokenFile string   `json:"token_file,omitempty"`
 }
@@ -47,8 +48,9 @@ type file struct {
 	Spool     string `json:"spool"`
 	Composer  string `json:"composer"`
 	PHP       string `json:"php"`
-	Nginx     string `json:"nginx"`   // wie php: Programm für `nginx -v` (nicht für kind=host)
-	MariaDB   string `json:"mariadb"` // Programm für `mariadb --version` (nicht für kind=host)
+	Nginx     string `json:"nginx"`    // wie php: Programm für `nginx -v` (nicht für kind=host)
+	MariaDB   string `json:"mariadb"`  // Programm für `mariadb --version` (nicht für kind=host)
+	Smartctl  string `json:"smartctl"` // Programm für die SMART-Abfrage, leer = smartctl im PATH
 	Sites     []Site `json:"sites"`
 }
 
@@ -59,6 +61,7 @@ type Config struct {
 	Spool          string
 	Composer, PHP  string
 	Nginx, MariaDB string
+	Smartctl       string
 	Sites          []Site
 }
 
@@ -80,7 +83,7 @@ func Load(path string) (Config, error) {
 	if dec.More() {
 		return Config{}, fmt.Errorf("%s: unerwartete Daten nach dem JSON-Dokument", path)
 	}
-	c := Config{Sitewatch: f.Sitewatch, Spool: f.Spool, Composer: f.Composer, PHP: f.PHP, Nginx: f.Nginx, MariaDB: f.MariaDB, Sites: f.Sites, Interval: 5 * time.Minute}
+	c := Config{Sitewatch: f.Sitewatch, Spool: f.Spool, Composer: f.Composer, PHP: f.PHP, Nginx: f.Nginx, MariaDB: f.MariaDB, Smartctl: f.Smartctl, Sites: f.Sites, Interval: 5 * time.Minute}
 	if err := CheckSitewatchURL(c.Sitewatch); err != nil {
 		return Config{}, err
 	}
@@ -145,8 +148,8 @@ func checkSite(i int, s Site) error {
 			return fmt.Errorf("site %q: ungültiger env-Name %q", s.ID, k)
 		}
 	}
-	if (s.Nginx != nil && *s.Nginx) || (s.MariaDB != nil && *s.MariaDB) {
-		return fmt.Errorf("site %q: nginx/mariadb erlauben nur false (Programme stehen auf oberster Ebene)", s.ID)
+	if (s.Nginx != nil && *s.Nginx) || (s.MariaDB != nil && *s.MariaDB) || (s.SMART != nil && *s.SMART) {
+		return fmt.Errorf("site %q: nginx/mariadb/smart erlauben nur false (Programme stehen auf oberster Ebene)", s.ID)
 	}
 	seenAct := map[string]bool{}
 	for _, name := range s.Actions {

@@ -11,6 +11,9 @@ Was das Dashboard zeigt (je Site und für den Server):
 - offene Composer-Updates und Sicherheitshinweise (`composer outdated/audit`), mit Ausschlussregeln
 - letzte Fehler aus den Monolog-Logs, offene Contao-Migrationen, letzter Contao-Cron-Lauf
 - freier Speicherplatz, Alter des letzten Backups, Ablauf des TLS-Zertifikats, Wartungsmodus
+- SMART-Zustand der Platten (nur `host`-Einträge, über `smartctl` aus smartmontools; der Agent braucht Leserechte auf die Geräte, i. d. R. Root): Gesamturteil „failed“ ist kritisch, defekte/umgelagerte Sektoren sind eine Warnung. Fehlt `smartctl`, erscheint ein Problem („Teilweise keine Daten“); auf VMs ohne echte Platten schaltet man die Abfrage je Site ab (siehe „SMART und RAID“ unten)
+- Linux-Software-RAID (mdadm, aus `/proc/mdstat`, nur `host`-Einträge): ein degradierter oder inaktiver Verbund ist kritisch, ein als defekt markiertes Mitglied bei vollständigem Verbund eine Warnung. Hardware-RAID-Controller und ZFS/btrfs sind nicht abgedeckt (einzelne Platten hinter einem Controller nur, wenn `smartctl --scan` sie liefert)
+- Verlauf der defekten Sektoren und der fehlenden RAID-Platten als Kurven (bei verdichteten Punkten gilt das Maximum)
 - Verlauf und Trends (Kurven, Statusband, Tagesstände) und eine Bewertung OK / Warnung / Kritisch
 - Erreichbarkeit und Antwortzeit: Sitewatch ruft die https-Adresse jeder Site regelmäßig auf (Uptime in %, Verlauf je Tag, Latenz)
 - Alarmierung per E-Mail, wenn eine Site kritisch wird
@@ -107,7 +110,7 @@ Auf dem Server `/etc/sitewatch-agent/bootstrap.json` anlegen (`chmod 600`; Vorla
 
 Dann `systemctl enable --now sitewatch-agent`. Der Agent holt vor jedem Lauf die Konfiguration (Sites, Intervall) signiert vom
 Dashboard; den öffentlichen Schlüssel zeigt `sitewatch pubkey -data /var/lib/sitewatch`. Programme (`composer`, `php`, `nginx`,
-`mariadb`), Token und `roots` bleiben lokal, aus dem Dashboard kommen nur Daten. Fällt das Dashboard aus, arbeitet der Agent
+`mariadb`, `smartctl`), Token und `roots` bleiben lokal, aus dem Dashboard kommen nur Daten. Fällt das Dashboard aus, arbeitet der Agent
 mit der zuletzt geprüften Konfiguration weiter, bis sie abläuft.
 
 Für Server, die ohne Dashboard-Konfiguration laufen sollen, gibt es `sitewatch-agent -config datei.json`
@@ -115,6 +118,23 @@ Für Server, die ohne Dashboard-Konfiguration laufen sollen, gibt es `sitewatch-
 
 **Art einer Site (`kind`):** `contao` (Contao-Konsole, Migrationen, Cron), `php` (sonstige PHP-Site) und `host` (nur
 Servermesswerte: Speicherplatz, nginx, MariaDB; erscheint als eigener Eintrag).
+
+**SMART und RAID (nur `host`-Einträge):** Der Agent fragt die Platten über `smartctl` ab und liest Linux-Software-RAIDs aus
+`/proc/mdstat`. Dafür gilt:
+
+- `smartmontools` muss auf dem Server installiert sein (`apt install smartmontools`), und der Agent braucht Leserechte auf die
+  Geräte. Die mitgelieferten systemd-Units laufen als Root, das genügt. Läuft er unter einem anderen Benutzer, meldet er
+  „SMART nicht lesbar“.
+- Liegt `smartctl` im `PATH` des Agenten, ist nichts einzutragen. Nur bei einem anderen Ort oder einem Wrapper-Skript trägt man den
+  absoluten Pfad als `"smartctl": "/usr/sbin/smartctl"` ein, und zwar **lokal auf dem Server**, nicht im Dashboard: in der
+  `bootstrap.json` (Betrieb mit Dashboard-Konfiguration) bzw. auf oberster Ebene der Datei für `-config` (siehe die Vorlagen unter
+  `/usr/share/doc/sitewatch-agent/examples/`). Wie bei `composer` oder `php` bestimmt nur die lokale Datei, welches Programm der Agent
+  startet; aus dem Dashboard kommen nur Daten.
+- Auf VMs ohne echte Platten gibt es nichts abzufragen, und das fehlende `smartctl` würde als Problem gemeldet. Dort schaltet man die
+  Abfrage je Site ab: im Dashboard unter „Agenten“ das Häkchen „keine SMART-Abfrage (VM)“, in einer lokalen Konfigurationsdatei
+  `"smart": false` an der Site. Das RAID-Lesen bleibt aktiv und meldet nichts, wenn es keinen md-Verbund gibt.
+- Bewertung: SMART „failed“ und ein degradierter oder inaktiver RAID-Verbund sind kritisch, defekte Sektoren und ein als defekt
+  markiertes RAID-Mitglied sind eine Warnung. Hardware-RAID-Controller, ZFS und btrfs sind nicht abgedeckt.
 
 **Updates ausschließen:** `"ignore_updates": ["contao/*:6.*", "vendor/paket"]` je Site. Eine Regel ist `paket-glob` (jedes Update)
 oder `paket-glob:versions-glob`. Treffer bleiben sichtbar („ausgeschlossen"), zählen aber nicht als offenes Update.

@@ -116,7 +116,7 @@ func TestHostViaConfiguredPrograms(t *testing.T) {
 		}
 		return p
 	}
-	cfg := Config{SiteID: "h", Kind: "host", Path: dir,
+	cfg := Config{SiteID: "h", Kind: "host", Path: dir, NoSMART: true,
 		Nginx:   script("ng", "echo 'nginx version: nginx/1.27.0' >&2"),
 		MariaDB: script("db", "echo 'mariadb  Ver 15.1 Distrib 11.4.2-MariaDB, for debian-linux-gnu'")}
 	r, err := Collect(context.Background(), cfg)
@@ -162,5 +162,86 @@ func TestNoNginxNoMariaDB(t *testing.T) {
 		Nginx: bad, MariaDB: bad, NoNginx: true, NoMariaDB: true})
 	if err != nil || len(r.Site.Problems) != 0 || r.Host.Nginx != "" || r.Host.MariaDB != "" {
 		t.Fatalf("%+v %v", r, err)
+	}
+}
+
+func TestParseSMART(t *testing.T) {
+	d, ok := ParseSMART(`{"model_name":"X","smart_status":{"passed":false},"temperature":{"current":41},
+	 "ata_smart_attributes":{"table":[{"id":5,"raw":{"value":8}},{"id":197,"raw":{"value":2}},{"id":9,"raw":{"value":100}}]}}`)
+	if !ok || d.Passed == nil || *d.Passed || d.BadSectors == nil || *d.BadSectors != 10 || *d.TempC != 41 {
+		t.Errorf("ATA: ok=%v %+v", ok, d)
+	}
+	d, ok = ParseSMART(`{"smart_status":{"passed":true},"nvme_smart_health_information_log":{"media_errors":0}}`)
+	if !ok || !*d.Passed || *d.BadSectors != 0 {
+		t.Errorf("NVMe: ok=%v %+v", ok, d)
+	}
+	if _, ok = ParseSMART(`{"smartctl":{"messages":[{"string":"Permission denied"}]}}`); ok {
+		t.Error("ohne Urteil darf ok nicht gelten")
+	}
+}
+
+func TestParseMdstat(t *testing.T) {
+	in := `Personalities : [raid1] [raid6]
+md0 : active raid1 sdb1[1] sda1[0]
+      976630336 blocks super 1.2 [2/2] [UU]
+      bitmap: 0/8 pages [0KB], 65536KB chunk
+
+md1 : active (auto-read-only) raid1 sdb2[1] sda2[0](F)
+      976630336 blocks super 1.2 [2/1] [_U]
+      [>....................]  recovery =  3.2% (31232/976630336) finish=80.5min
+
+md2 : inactive sdc1[0](S)
+      1000 blocks super 1.2
+
+unused devices: <none>
+`
+	got := ParseMdstat(in)
+	if len(got) != 3 {
+		t.Fatalf("%d Verbünde: %+v", len(got), got)
+	}
+	if a := got[0]; a.Name != "md0" || a.Level != "raid1" || a.Total != 2 || a.Active != 2 || a.Missing() != 0 || a.Syncing {
+		t.Errorf("md0: %+v", a)
+	}
+	if a := got[1]; a.Level != "raid1" || a.Active != 1 || a.Failed != 1 || a.Missing() != 1 || !a.Syncing {
+		t.Errorf("md1: %+v", a)
+	}
+	if a := got[2]; !a.Inactive || a.Missing() != 1 {
+		t.Errorf("md2: %+v", a)
+	}
+	if len(ParseMdstat("Personalities :\nunused devices: <none>\n")) != 0 {
+		t.Error("ohne Verbund muss die Liste leer sein")
+	}
+}
+
+func TestCollectSMARTViaProgram(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "smartctl")
+	body := "#!/bin/sh\ncase \"$2\" in\n--scan) echo '{\"devices\":[{\"name\":\"/dev/sda\",\"type\":\"sat\"},{\"name\":\"/dev/sdb\",\"type\":\"sat\"}]}';;\n*) case \"$*\" in *sda) echo '{\"smart_status\":{\"passed\":false}}';; *) echo '{}';; esac;;\nesac\nexit 4\n"
+	if err := os.WriteFile(p, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	r, err := Collect(context.Background(), Config{SiteID: "h", Kind: "host", Path: dir, Smartctl: p, Nginx: "/bin/false", MariaDB: "/bin/false", NoNginx: true, NoMariaDB: true})
+	if err != nil || len(r.Host.Disks) != 1 || r.Host.Disks[0].Device != "/dev/sda" || !r.Host.Disks[0].Failed() {
+		t.Fatalf("Platten: %+v %v", r.Host.Disks, err)
+	}
+	if len(r.Site.Problems) != 1 || !strings.Contains(r.Site.Problems[0], "/dev/sdb") {
+		t.Errorf("sdb ohne Urteil muss ein Problem sein: %v", r.Site.Problems)
+	}
+}
+
+func TestSMARTProblems(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "smartctl")
+	scan := `echo '{"devices":[{"name":"/dev/a","type":"sat"},{"name":"/dev/b","type":"sat"},{"name":"/dev/c","type":"sat"},{"name":"/dev/d","type":"sat"}]}'`
+	os.WriteFile(p, []byte("#!/bin/sh\ncase \"$2\" in --scan) "+scan+";; *) echo '{}';; esac\n"), 0o755)
+	cfg := Config{SiteID: "h", Kind: "host", Path: dir, Smartctl: p, NoNginx: true, NoMariaDB: true}
+	r, _ := Collect(context.Background(), cfg)
+	if len(r.Site.Problems) != 1 || !strings.Contains(r.Site.Problems[0], "4 Platten") {
+		t.Errorf("Sammelzeile erwartet: %v", r.Site.Problems)
+	}
+	os.WriteFile(p, []byte("#!/bin/sh\necho kaputt\n"), 0o755)
+	r, _ = Collect(context.Background(), cfg)
+	if len(r.Site.Problems) != 1 || !strings.Contains(r.Site.Problems[0], "kein gültiges JSON") {
+		t.Errorf("ungültiges JSON muss ein Problem sein: %v", r.Site.Problems)
 	}
 }

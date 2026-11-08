@@ -152,6 +152,7 @@ func jobsFrom(c agentcfg.Config) []job {
 			SiteID: s.ID, Name: s.Name, Kind: s.Kind, URL: s.URL, Path: s.Path,
 			Composer: absIfPath(c.Composer), PHP: absIfPath(c.PHP), AgentVersion: version,
 			Nginx: ng, MariaDB: db, NoNginx: s.Nginx != nil && !*s.Nginx, NoMariaDB: s.MariaDB != nil && !*s.MariaDB,
+			Smartctl: absIfPath(c.Smartctl), NoSMART: s.SMART != nil && !*s.SMART,
 			Host: s.Host, BackupDir: s.BackupDir, BackupGlob: s.BackupGlob, Env: s.EnvList(), IgnoreUpdates: s.IgnoreUpdates,
 		}}
 		if c.Spool != "" {

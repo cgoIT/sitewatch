@@ -37,8 +37,10 @@ type Config struct {
 	BackupGlob     string   // Dateimaske für Backups (filepath.Match), leer = alle Dateien
 	IgnoreUpdates  []string // Regeln "paket-glob" oder "paket-glob:versions-glob" (z. B. "contao/*:6.*"); Treffer zählen nicht als offene Updates
 	Nginx, MariaDB string   // optional: Programme für `nginx -v` / `mariadb --version`, z. B. Docker-Wrapper; leer = auf dem Host suchen
+	Smartctl       string   // optional: Pfad zu smartctl, leer = auf dem Host suchen
 	NoNginx        bool     // Site hat keinen nginx bzw. keine DB: nicht suchen, kein Problem melden
 	NoMariaDB      bool
+	NoSMART        bool     // keine SMART-Abfrage (VM ohne echte Platten)
 	Host           bool     // freien Speicher erfassen und nginx/MariaDB auf dem Server suchen (konfigurierte Wrapper in Nginx/MariaDB gelten auch ohne)
 	Env            []string // zusätzliche Umgebung (KEY=wert) für composer/php, z. B. SITE_DIR für die Docker-Wrapper
 	Now            func() time.Time
@@ -310,6 +312,12 @@ func collectHost(ctx context.Context, cfg Config, r *report.Report, problem func
 	}
 	if pct, ok := diskFreePct(cfg.Path); ok && cfg.Host {
 		r.Host.DiskFreePct = &pct
+	}
+	if cfg.Host {
+		collectRAID(r)
+		if !cfg.NoSMART {
+			collectSMART(ctx, cfg, r, problem)
+		}
 	}
 }
 

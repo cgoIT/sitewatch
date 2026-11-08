@@ -26,6 +26,8 @@ type Sample struct {
 	PendingMigrations *int
 	CronAgeSec        *int // Alter des letzten Cron-Laufs zum Zeitpunkt des Reports
 	BackupAgeSec      *int
+	BadSectors        *int // Summe über alle Platten (SMART); bei verdichteten Punkten das Maximum im Block
+	RaidMissing       *int // fehlende Platten in allen RAID-Verbünden; bei verdichteten Punkten das Maximum im Block
 	Contao, PHP       string
 	MariaDB, Nginx    string
 }
@@ -49,6 +51,20 @@ func SampleOf(e Entry, level int) Sample {
 		return &n
 	}
 	s.CronAgeSec, s.BackupAgeSec = age(r.Site.CronLastRun), age(r.Site.LastBackup)
+	if len(r.Host.Disks) > 0 {
+		n := 0
+		for _, d := range r.Host.Disks {
+			n += d.Bad()
+		}
+		s.BadSectors = &n
+	}
+	if len(r.Host.Raids) > 0 {
+		n := 0
+		for _, a := range r.Host.Raids {
+			n += a.Missing()
+		}
+		s.RaidMissing = &n
+	}
 	return s
 }
 

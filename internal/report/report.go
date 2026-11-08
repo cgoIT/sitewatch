@@ -37,6 +37,37 @@ type Host struct {
 	Nginx       string `json:"nginx,omitempty"`
 	MariaDB     string `json:"mariadb,omitempty"`
 	DiskFreePct *int   `json:"disk_free_pct,omitempty"`
+	Disks       []Disk `json:"disks,omitempty"` // SMART je Platte; leer = nicht erfasst
+	Raids       []Raid `json:"raids,omitempty"` // Linux-Software-RAID (mdadm); leer = keins oder nicht erfasst
+}
+
+// Raid ist ein Software-RAID-Verbund aus /proc/mdstat.
+type Raid struct {
+	Name     string `json:"name"`   // z. B. md0
+	Level    string `json:"level"`  // z. B. raid1; bei inaktivem Verbund leer
+	Total    int    `json:"total"`  // Sollzahl der Platten
+	Active   int    `json:"active"` // davon aktiv
+	Failed   int    `json:"failed"` // als defekt markierte Mitglieder (F)
+	Inactive bool   `json:"inactive,omitempty"`
+	Syncing  bool   `json:"syncing,omitempty"` // Wiederherstellung, Resync, Reshape oder Prüfung läuft
+}
+
+// Missing liefert die fehlenden Platten (Soll minus aktiv); ein inaktiver Verbund zählt mindestens eine.
+func (r Raid) Missing() int {
+	n := max(r.Total-r.Active, 0)
+	if r.Inactive {
+		n = max(n, 1)
+	}
+	return n
+}
+
+// Disk ist der SMART-Zustand einer Platte (smartctl).
+type Disk struct {
+	Device     string `json:"device"`
+	Model      string `json:"model,omitempty"`
+	Passed     *bool  `json:"passed"`                // Gesamturteil des Geräts (SMART overall-health); false = Ausfall droht
+	TempC      *int   `json:"temp_c,omitempty"`      // nil = unbekannt
+	BadSectors *int   `json:"bad_sectors,omitempty"` // ATA: Reallocated + Pending + Offline Uncorrectable; NVMe: Media Errors; nil = unbekannt
 }
 
 // Site beschreibt die überwachte Webseite.
@@ -73,6 +104,15 @@ type Package struct {
 	Abandoned bool   `json:"abandoned,omitempty"`
 	// Ignored: per Regel in der Agent-Konfiguration ausgeschlossen (z. B. keine neue Hauptversion); zählt nicht als offenes Update.
 	Ignored bool `json:"ignored,omitempty"`
+}
+
+// Failed meldet, ob SMART der Platte einen Fehler bescheinigt; Bad liefert die defekten Sektoren (0 = keine oder unbekannt).
+func (d Disk) Failed() bool { return d.Passed != nil && !*d.Passed }
+func (d Disk) Bad() int {
+	if d.BadSectors == nil {
+		return 0
+	}
+	return *d.BadSectors
 }
 
 // OpenUpdates zählt die Pakete mit verfügbarem Update, die nicht ausgeschlossen sind.
@@ -139,6 +179,19 @@ func (r *Report) Validate(now time.Time) error {
 	if t := r.Site.LastBackup; t != nil && t.After(now.Add(5*time.Minute)) {
 		return errors.New("last_backup liegt in der Zukunft")
 	}
+	for _, d := range r.Host.Disks {
+		if len(d.Device) > 128 || len(d.Model) > 128 || badInt(d.BadSectors) || badInt(d.TempC) {
+			return errors.New("ungültige Plattenangabe")
+		}
+	}
+	for _, a := range r.Host.Raids {
+		if len(a.Name) > 128 || len(a.Level) > 128 || a.Total < 0 || a.Active < 0 || a.Failed < 0 || a.Total > 1<<20 || a.Active > 1<<20 || a.Failed > 1<<20 {
+			return errors.New("ungültige RAID-Angabe")
+		}
+	}
+	if len(r.Host.Disks) > 64 || len(r.Host.Raids) > 64 {
+		return errors.New("zu viele Platten oder RAID-Verbünde im Report")
+	}
 	if len(r.Errors) > 100 || len(r.Site.Outdated) > 1000 || len(r.Site.Advisories) > 200 || len(r.Site.Problems) > 50 {
 		return errors.New("zu viele Einträge im Report")
 	}
@@ -149,3 +202,6 @@ func (r *Report) Validate(now time.Time) error {
 	}
 	return nil
 }
+
+// badInt: negativ oder absurd groß (die Werte landen summiert im Verlauf).
+func badInt(p *int) bool { return p != nil && (*p < 0 || *p > 1<<30) }

@@ -360,3 +360,34 @@ func TestMigrate(t *testing.T) {
 		t.Errorf("neuere Datenbank: %v", err)
 	}
 }
+
+func TestDiskHealthSamples(t *testing.T) {
+	s := open(t)
+	now := time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC)
+	at := func(hours int) time.Time {
+		return now.Add(-45 * 24 * time.Hour).Truncate(24 * time.Hour).Add(time.Duration(hours) * time.Hour)
+	}
+	e := func(h int, bad, missing int) Entry {
+		en := entry("a", at(h), 0, nil)
+		en.Report.Host.Disks = []report.Disk{{Device: "/dev/sda", BadSectors: &bad}}
+		en.Report.Host.Raids = []report.Raid{{Name: "md0", Total: 2, Active: 2 - missing}}
+		return en
+	}
+	s.Save(e(1, 5, 0), 0)
+	s.Save(e(2, 9, 1), 0)
+	s.Save(e(3, 7, 0), 0) // alle im selben 6-Stunden-Block
+	s.Save(entry("a", at(8), 0, nil), 0)
+	if err := s.Maintain(now); err != nil {
+		t.Fatal(err)
+	}
+	hist, _ := s.History("a", 0) // neueste zuerst
+	if len(hist) != 2 {
+		t.Fatalf("%d Punkte, erwartet 2", len(hist))
+	}
+	if hist[0].BadSectors != nil || hist[0].RaidMissing != nil {
+		t.Errorf("ohne Daten muss nil bleiben: %+v", hist[0])
+	}
+	if b := hist[1]; b.BadSectors == nil || *b.BadSectors != 9 || b.RaidMissing == nil || *b.RaidMissing != 1 {
+		t.Errorf("Block: Maximum erwartet (9 Sektoren, 1 fehlend): %+v", b)
+	}
+}
