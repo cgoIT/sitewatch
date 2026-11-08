@@ -49,7 +49,7 @@ func settingGroups(cur status.Config, entered map[string]string) []settingGroup 
 func (s *Server) settingsPage(w http.ResponseWriter, msg string, entered map[string]string, saved bool, code int) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(code)
-	s.render(w, "settings.html", map[string]any{"Groups": settingGroups(s.cfg(), entered), "Error": msg, "Saved": saved})
+	s.render(w, "settings.html", map[string]any{"Groups": settingGroups(s.cfg(), entered), "Error": msg, "Saved": saved, "PushKey": s.pushKey()})
 }
 
 func (s *Server) settingsShow(w http.ResponseWriter, r *http.Request) {
@@ -126,4 +126,11 @@ func (s *Server) settingsExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("settings: Konfiguration exportiert (%d Agenten)", len(f.Agents))
+}
+
+func (s *Server) pushKey() string {
+	if s.Push == nil {
+		return ""
+	}
+	return s.Push.PublicKey()
 }
