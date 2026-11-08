@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sitewatch – Einstellungen</title>{{template "css"}}</head>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sitewatch – Einstellungen</title>{{template "css"}}<style>main section.card{margin-top:16px}</style></head>
 <body>{{template "top" "settings"}}
 <main>
 <h1 style="margin:0;font-size:26px;font-weight:600">Einstellungen</h1>
@@ -16,6 +16,13 @@
 <section class="card"><h2>Standardwerte</h2><div class="pad">
   <form method="post" action="/settings/reset" class="inline"><button class="btn" type="submit">Alle Werte auf den Standard zurücksetzen</button></form>
 </div></section>
+{{if .PushKey}}<section class="card"><h2>Push-Nachrichten</h2><div class="pad" id="push" data-key="{{.PushKey}}">
+  <p class="muted" style="margin-top:0">Alarme als Benachrichtigung auf dieses Gerät. Auf dem iPhone muss Sitewatch zuerst über „Teilen → Zum Home-Bildschirm“ installiert und von dort geöffnet werden.</p>
+  <p id="push-msg">Skript wird geladen …</p>
+  <button class="btn primary" type="button" id="push-on" hidden>Auf diesem Gerät aktivieren</button>
+  <button class="btn" type="button" id="push-test" hidden>Testnachricht senden</button>
+  <button class="btn" type="button" id="push-off" hidden>Auf diesem Gerät abschalten</button>
+</div></section><script src="/push.js"></script>{{end}}
 <section class="card"><h2>Sicherung</h2><div class="pad">
   <p class="muted" style="margin-top:0">Agenten (mit Token-Hash) und Schwellwerte als JSON-Datei. Sie lässt sich beim Start einer neuen, leeren Installation mit <code>-import</code> einspielen. Reports und der Signierschlüssel (<code>signing.key</code>) sind nicht enthalten. Die Datei ist so schützenswert wie die Datenbank.</p>
   <form method="post" action="/settings/export" class="inline"><button class="btn" type="submit">Konfiguration exportieren</button></form>

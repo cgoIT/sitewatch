@@ -50,7 +50,7 @@ const baseVersion = 1
 
 // migrations: Eintrag i hebt die Datenbank von Version baseVersion+i auf baseVersion+i+1. Jeder läuft in einer eigenen Transaktion
 // zusammen mit dem Setzen der Version, ein Fehler lässt die Datenbank unverändert.
-var migrations = []func(tx *sql.Tx) error{migrateUptime}
+var migrations = []func(tx *sql.Tx) error{migrateUptime, migratePush}
 
 // migrate bringt die Datenbank auf die aktuelle Version. Eine neuere Datenbank (Programm zurückgerollt) wird nicht angefasst.
 // Die Version wird je Schritt innerhalb der Transaktion gelesen: Starten zwei Prozesse gleichzeitig, führt nur einer eine Migration aus.

@@ -27,6 +27,7 @@ import (
 	"sitewatch/internal/eol"
 	"sitewatch/internal/login"
 	"sitewatch/internal/probe"
+	"sitewatch/internal/push"
 	"sitewatch/internal/ratelimit"
 	"sitewatch/internal/sign"
 	"sitewatch/internal/status"
@@ -158,17 +159,36 @@ func serve(args []string) {
 	settings.Set(withUptime)
 	seen := probe.Store{Store: st, P: prober} // Reports samt ermitteltem Zertifikat-Ablauf, für Oberfläche und Alarme
 	var testMail func() error
+	var mail alert.Sender
 	if to := split(*alertTo); len(to) > 0 {
 		if *alertFrom == "" || !strings.Contains(*alertSMTP, ":") {
 			log.Fatal("-alert-to braucht -alert-from und -alert-smtp als host:port")
 		}
-		send := alert.SMTP(*alertSMTP, os.Getenv("SITEWATCH_SMTP_USER"), os.Getenv("SITEWATCH_SMTP_PASSWORD"), *alertFrom, to)
-		w := &alert.Watcher{Store: seen, Config: cfg, Settings: settings, Now: time.Now, State: st, Send: send}
-		go w.Run(context.Background(), *alertEvery)
-		testMail = func() error { return send(testSubject, testBody) }
-	} else {
-		log.Print("Hinweis: keine Alarmierung (-alert-to nicht gesetzt)")
+		mail = alert.SMTP(*alertSMTP, os.Getenv("SITEWATCH_SMTP_USER"), os.Getenv("SITEWATCH_SMTP_PASSWORD"), *alertFrom, to)
+		testMail = func() error { return mail(testSubject, testBody) }
 	}
+	// Web-Push ist immer eingerichtet; ohne angemeldetes Gerät geht nichts raus. Die Kontaktadresse für den Push-Dienst ist -public-url.
+	vapidPriv, vapidPub, err := push.LoadOrCreateKey(filepath.Join(*data, "vapid.key"))
+	if err != nil {
+		log.Fatalf("VAPID-Schlüssel: %v", err)
+	}
+	pusher := &push.Sender{Subs: st, Private: vapidPriv, Public: vapidPub, Subscriber: *publicURL}
+	if !strings.HasPrefix(*publicURL, "https://") {
+		log.Print("Hinweis: Web-Push braucht -public-url (https) als Kontaktadresse; manche Push-Dienste (Apple) lehnen sonst ab")
+	}
+	if mail == nil {
+		log.Print("Hinweis: keine E-Mail-Alarmierung (-alert-to nicht gesetzt); Alarme gehen nur an Geräte mit Push. Ohne angemeldetes Gerät erreicht ein Alarm niemanden.")
+	}
+	send := func(subject, body string) error { // E-Mail entscheidet über das Wiederholen, Push ist Best-Effort
+		var err error
+		if mail != nil {
+			err = mail(subject, body)
+		}
+		_ = pusher.Send(subject, body)
+		return err
+	}
+	w := &alert.Watcher{Store: seen, Config: cfg, Settings: settings, Now: time.Now, State: st, Send: send}
+	go w.Run(context.Background(), *alertEvery)
 	if _, err := os.Stat(filepath.Join(*data, "tokens.json")); err == nil {
 		log.Printf("Hinweis: %s wird nicht mehr gelesen. Sites mit eigenem Token müssen im Dashboard als Agent angelegt werden.", filepath.Join(*data, "tokens.json"))
 	}
@@ -191,7 +211,7 @@ func serve(args []string) {
 		settings.Set(c)
 		return nil
 	}
-	srv.Version, srv.TestMail = version, testMail
+	srv.Version, srv.TestMail, srv.Push = version, testMail, pusher
 	if srv.SignKey, err = sign.LoadOrCreateKey(*signKey); err != nil {
 		log.Fatalf("-signing-key: %v", err)
 	}
@@ -254,7 +274,7 @@ func withLogin(srv *web.Server, acc login.Access) http.Handler {
 		log.Fatal("SITEWATCH_SESSION_KEY ist kein Hex-String")
 	}
 	redirect := env("SITEWATCH_OIDC_REDIRECT_URL")
-	sessions, err := login.NewSessions(key, 12*time.Hour, strings.HasPrefix(redirect, "https://"))
+	sessions, err := login.NewSessions(key, 30*24*time.Hour, strings.HasPrefix(redirect, "https://"))
 	if err != nil {
 		log.Fatal(err)
 	}

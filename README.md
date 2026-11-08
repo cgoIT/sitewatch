@@ -63,6 +63,7 @@ Dann `systemctl enable --now sitewatch`. Der Dienst lauscht auf `127.0.0.1:8080`
 - **Daten:** `/var/lib/sitewatch` (`sitewatch.db` mit Reports, Agenten und Aufträgen sowie `signing.key`). Gehört in die Sicherung;
   ohne `signing.key` müssten alle Agenten den neuen öffentlichen Schlüssel erhalten. Die Datenbank sichert man mit
   `sqlite3 sitewatch.db ".backup ziel.db"`.
+- **Push-Nachrichten:** Unter „Einstellungen“ das Gerät aktivieren (iPhone: Sitewatch zuerst über „Teilen → Zum Home-Bildschirm“ installieren und von dort öffnen). Alarme kommen dann zusätzlich zur E-Mail als Web-Push (höchstens 20 Geräte). Die Sitzung bleibt bei Nutzung bis zu 90 Tage nach dem Login offen. `-public-url` (https) dient als Kontaktadresse für den Push-Dienst; der Schlüssel liegt in `<data>/vapid.key`.
 - **Alarm per E-Mail:** `-alert-to`, `-alert-from`, `-alert-smtp`; Zugang über `SITEWATCH_SMTP_USER` und `SITEWATCH_SMTP_PASSWORD`.
   Mit gesetztem `-alert-to` erscheint in der Fußzeile der Knopf „Testmail senden"; ohne Oberfläche geht es mit
   `sitewatch alert-test -alert-to … -alert-from … -alert-smtp …` (Zugang wieder über die beiden Umgebungsvariablen).

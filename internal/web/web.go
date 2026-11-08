@@ -49,6 +49,8 @@ type Server struct {
 	Version string
 	// TestMail verschickt eine Testmail über die eingestellte Alarmierung; nil = nicht eingerichtet (kein Knopf).
 	TestMail func() error
+	// Push schaltet Web-Push ein (Bereich in den Einstellungen, Routen unter /push); nil = aus.
+	Push PushService
 	// Jobs und Who schalten die Aufträge ein (Seiten unter /jobs, Kanal für die Agenten). Who liefert den angemeldeten Benutzer
 	// ("" = niemand); ohne Login (Protect == nil) gibt es keine Seiten für Aufträge, weil die Freigabe eine Person braucht.
 	Jobs store.Jobs
@@ -63,6 +65,7 @@ type Server struct {
 
 	mailMu sync.Mutex
 	mailAt time.Time
+	pushAt time.Time // letzte Testnachricht per Push, geschützt durch mailMu
 
 	fetchMu sync.Mutex
 	fetched map[string]time.Time // wann der Agent die Konfiguration zuletzt abgeholt hat (nur im Speicher)
@@ -101,6 +104,9 @@ func (s *Server) Handler() http.Handler {
 		ui.HandleFunc("POST /alert-test", s.testMail)
 	}
 	s.settingsRoutes(ui)
+	if s.Push != nil {
+		s.pushRoutes(ui)
+	}
 	if s.Agents != nil {
 		s.agentRoutes(ui)
 	}
@@ -124,6 +130,9 @@ func (s *Server) Handler() http.Handler {
 	// Manifest und Symbol ohne Login: Der Browser holt sie ohne Cookies, sonst ließe sich die Seite nicht installieren.
 	mux.HandleFunc("GET /manifest.webmanifest", manifest)
 	mux.HandleFunc("GET /icon.svg", icon)
+	// Service Worker und Skript ohne Login: Der Browser holt den Worker ohne Weiterleitung, sonst schlägt die Registrierung fehl.
+	mux.HandleFunc("GET /sw.js", script("sw.js"))
+	mux.HandleFunc("GET /push.js", script("push.js"))
 	for _, n := range []string{"icon-192.png", "icon-512.png", "apple-touch-icon.png"} {
 		mux.HandleFunc("GET /"+n, png(n))
 	}
@@ -138,7 +147,7 @@ func securityHeaders(next http.Handler) http.Handler {
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "no-referrer")
-		h.Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'self'")
+		h.Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; manifest-src 'self'; script-src 'self'; worker-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'")
 		next.ServeHTTP(w, r)
 	})
 }
