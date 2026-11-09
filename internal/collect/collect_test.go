@@ -257,3 +257,13 @@ func TestParseSMARTTemperature(t *testing.T) {
 		}
 	}
 }
+
+func TestSmartArgs(t *testing.T) {
+	for typ, want := range map[string]string{
+		"scsi": "-j -H -A /dev/sdb", "sat": "-j -H -A /dev/sdb", "": "-j -H -A /dev/sdb", "nvme": "-j -H -A -d nvme /dev/sdb", "megaraid,3": "-j -H -A -d megaraid,3 /dev/sdb",
+	} {
+		if got := strings.Join(smartArgs(typ, "/dev/sdb"), " "); got != want {
+			t.Errorf("Typ %q: %q, erwartet %q", typ, got, want)
+		}
+	}
+}

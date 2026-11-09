@@ -33,11 +33,7 @@ func collectSMART(ctx context.Context, cfg Config, r *report.Report, problem fun
 		if dev.Name == "" || dev.Name[0] == '-' { // kein Gerät, sondern eine Option
 			continue
 		}
-		args := []string{"-j", "-H", "-A"}
-		if dev.Type != "" {
-			args = append(args, "-d", dev.Type)
-		}
-		out, _, _, err := runEnv(ctx, cfg.Env, cfg.Path, bin, append(args, dev.Name)...)
+		out, _, _, err := runEnv(ctx, cfg.Env, cfg.Path, bin, smartArgs(dev.Type, dev.Name)...)
 		d, ok := ParseSMART(out)
 		if err != nil || !ok {
 			unreadable = append(unreadable, dev.Name)
@@ -52,6 +48,17 @@ func collectSMART(ctx context.Context, cfg Config, r *report.Report, problem fun
 	case len(unreadable) > 0:
 		problem("SMART nicht lesbar: %s (Rechte? smartctl braucht Root)", strings.Join(unreadable, ", "))
 	}
+}
+
+// smartArgs baut die Argumente für eine Platte. Der Typ aus --scan wird nur für Controller-Typen übernommen, die smartctl nicht selbst
+// erkennt (megaraid,N, 3ware,N, cciss,N ...). "scsi" (meldet --scan auch für SATA-Platten hinter dem SCSI-Layer) und "sat" bleiben der
+// Autoerkennung überlassen: mit "-d scsi" fehlen bei SATA-Platten die ATA-Attribute, also Temperatur und defekte Sektoren.
+func smartArgs(typ, name string) []string {
+	args := []string{"-j", "-H", "-A"}
+	if typ != "" && typ != "scsi" && typ != "sat" {
+		args = append(args, "-d", typ)
+	}
+	return append(args, name)
 }
 
 // ParseSMART liest die JSON-Ausgabe von "smartctl -j -H -A". ok=false: kein SMART-Urteil enthalten.
