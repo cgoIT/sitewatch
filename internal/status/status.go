@@ -46,6 +46,7 @@ type Config struct {
 	DiskCrit        int             // kritisch, wenn weniger als so viel Prozent frei sind
 	CronWarn        time.Duration   // Warnung, wenn der letzte Contao-Cron-Lauf länger her ist
 	CronCrit        time.Duration   // kritisch, wenn er noch länger her ist
+	RebootWarn      time.Duration   // Warnung, wenn ein Neustart des Servers (reboot-required) so lange aussteht
 	MaintWarn       time.Duration   // Warnung, wenn der Wartungsmodus so lange an ist
 	MaintCrit       time.Duration   // kritisch, wenn er noch länger an ist (vergessen)
 	Retention       store.Retention // Aufbewahrung des Verlaufs und der Tagesstände (siehe store)
@@ -59,7 +60,7 @@ type Config struct {
 // DefaultConfig liefert die Standardwerte aller Schwellwerte. Im Betrieb kommen Abweichungen aus der Datenbank (Seite „Einstellungen“).
 func DefaultConfig() Config {
 	return Config{StaleAfter: 15 * time.Minute, BundleStaleAfter: 3 * time.Hour, BundlePingAfter: 90 * time.Minute, ErrorWarn: 10, EOLWarn: 90 * 24 * time.Hour,
-		TLSWarn: 14 * 24 * time.Hour, BackupMax: 36 * time.Hour, DiskWarn: 15, DiskCrit: 5, CronWarn: 2 * time.Hour, CronCrit: 4 * time.Hour, MaintWarn: 2 * time.Hour, MaintCrit: 8 * time.Hour,
+		TLSWarn: 14 * 24 * time.Hour, BackupMax: 36 * time.Hour, DiskWarn: 15, DiskCrit: 5, CronWarn: 2 * time.Hour, CronCrit: 4 * time.Hour, MaintWarn: 2 * time.Hour, RebootWarn: 7 * 24 * time.Hour, MaintCrit: 8 * time.Hour,
 		UptimeFails: 3, LatencyWarn: 2 * time.Second, UptimeWarnPct: 99, Retention: store.DefaultRetention()}
 }
 
@@ -152,6 +153,19 @@ func Evaluate(r *report.Report, receivedAt, now time.Time, cfg Config) Result {
 		case a.Failed > 0:
 			raise(Warn, "RAID %s: %d Platte(n) als defekt markiert", a.Name, a.Failed)
 		}
+	}
+	if u := r.Host.Updates; u != nil && u.Security > 0 {
+		raise(Warn, "%d Sicherheitsupdate(s) des Betriebssystems offen", u.Security)
+	}
+	if o := r.Host.OS; o != nil && o.RebootRequired && o.RebootSince != nil && now.Sub(*o.RebootSince) > cfg.RebootWarn {
+		raise(Warn, "Neustart des Servers seit %s ausstehend", Duration(now.Sub(*o.RebootSince)))
+	}
+	if sd := r.Host.Systemd; sd != nil && len(sd.Failed) > 0 {
+		names := sd.Failed
+		if len(names) > 3 {
+			names = names[:3]
+		}
+		raise(Warn, "%d systemd-Unit(s) fehlgeschlagen: %s", len(sd.Failed), strings.Join(names, ", "))
 	}
 	if t := r.Site.CronLastRun; t != nil {
 		if l := CronLevel(*t, now, cfg); l > OK {

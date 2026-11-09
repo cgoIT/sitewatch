@@ -63,7 +63,7 @@ func TestReadLogErrors(t *testing.T) {
 }
 
 func TestCollectHostKind(t *testing.T) {
-	r, err := Collect(context.Background(), Config{SiteID: "host-a", Kind: "host", PHP: "/gibt/es/nicht"})
+	r, err := Collect(context.Background(), Config{SiteID: "host-a", Kind: "host", PHP: "/gibt/es/nicht", NoHostInfo: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +116,7 @@ func TestHostViaConfiguredPrograms(t *testing.T) {
 		}
 		return p
 	}
-	cfg := Config{SiteID: "h", Kind: "host", Path: dir, NoSMART: true,
+	cfg := Config{SiteID: "h", Kind: "host", Path: dir, NoSMART: true, NoHostInfo: true,
 		Nginx:   script("ng", "echo 'nginx version: nginx/1.27.0' >&2"),
 		MariaDB: script("db", "echo 'mariadb  Ver 15.1 Distrib 11.4.2-MariaDB, for debian-linux-gnu'")}
 	r, err := Collect(context.Background(), cfg)
@@ -220,7 +220,7 @@ func TestCollectSMARTViaProgram(t *testing.T) {
 	if err := os.WriteFile(p, []byte(body), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	r, err := Collect(context.Background(), Config{SiteID: "h", Kind: "host", Path: dir, Smartctl: p, Nginx: "/bin/false", MariaDB: "/bin/false", NoNginx: true, NoMariaDB: true})
+	r, err := Collect(context.Background(), Config{SiteID: "h", Kind: "host", Path: dir, Smartctl: p, NoHostInfo: true, Nginx: "/bin/false", MariaDB: "/bin/false", NoNginx: true, NoMariaDB: true})
 	if err != nil || len(r.Host.Disks) != 1 || r.Host.Disks[0].Device != "/dev/sda" || !r.Host.Disks[0].Failed() {
 		t.Fatalf("Platten: %+v %v", r.Host.Disks, err)
 	}
@@ -234,7 +234,7 @@ func TestSMARTProblems(t *testing.T) {
 	p := filepath.Join(dir, "smartctl")
 	scan := `echo '{"devices":[{"name":"/dev/a","type":"sat"},{"name":"/dev/b","type":"sat"},{"name":"/dev/c","type":"sat"},{"name":"/dev/d","type":"sat"}]}'`
 	os.WriteFile(p, []byte("#!/bin/sh\ncase \"$2\" in --scan) "+scan+";; *) echo '{}';; esac\n"), 0o755)
-	cfg := Config{SiteID: "h", Kind: "host", Path: dir, Smartctl: p, NoNginx: true, NoMariaDB: true}
+	cfg := Config{SiteID: "h", Kind: "host", Path: dir, Smartctl: p, NoHostInfo: true, NoNginx: true, NoMariaDB: true}
 	r, _ := Collect(context.Background(), cfg)
 	if len(r.Site.Problems) != 1 || !strings.Contains(r.Site.Problems[0], "4 Platten") {
 		t.Errorf("Sammelzeile erwartet: %v", r.Site.Problems)

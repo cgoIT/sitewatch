@@ -205,6 +205,7 @@ type row struct {
 	TLS, TLSLevel, Backup, BackupLevel string // "–" und Level "ok", wenn nicht gemeldet
 	// Nur für Hosts (Kind "host"): eigene Tabelle statt der Contao-Spalten.
 	Disk, MariaDB, Nginx, DiskLevel string
+	OSUpdates, OSUpdatesLevel       string // apt-Updates, "–" wenn nicht erfasst
 }
 
 type tiles struct{ Total, Contao, PHP, Crit, Warn, Updates int }
@@ -268,6 +269,15 @@ func (s *Server) rows(base map[string]store.Sample) ([]row, tiles, error) {
 			rw.MariaDB, rw.Nginx, rw.Disk, rw.DiskLevel = dash(rep.Host.MariaDB), dash(rep.Host.Nginx), "–", "ok"
 			if p := rep.Host.DiskFreePct; p != nil {
 				rw.Disk, rw.DiskLevel = fmt.Sprintf("%d %%", *p), status.DiskLevel(*p, s.cfg()).String()
+			}
+			rw.OSUpdates, rw.OSUpdatesLevel = "–", "ok"
+			if u := rep.Host.Updates; u != nil {
+				rw.OSUpdates = fmt.Sprint(u.Total)
+				if u.Security > 0 {
+					rw.OSUpdates += fmt.Sprintf(" (%d Sicherheit)", u.Security)
+					rw.OSUpdatesLevel = "warn"
+				}
+				t.Updates += u.Total
 			}
 		}
 		setLevel(&rw, res.Level)
@@ -491,7 +501,8 @@ func (s *Server) detail(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.render(w, "detail.html", map[string]any{
-		"R": rep, "Status": rw, "Packages": open, "Ignored": ignored, "History": hist, "Trend": tr, "OpenUpdates": len(open),
+		"HostView": hostViewOf(rep.Host, s.Now()),
+		"R":        rep, "Status": rw, "Packages": open, "Ignored": ignored, "History": hist, "Trend": tr, "OpenUpdates": len(open),
 		"Seen": status.Ago(s.Now().Sub(cur.ReceivedAt)),
 		"Day":  day, "DayLabel": dayLabel(day), "Days": dayOptions(days, day),
 		"Maintenance": maintenanceLabel(rep.Site.MaintenanceMode, rep.Site.MaintenanceSince),
@@ -499,6 +510,39 @@ func (s *Server) detail(w http.ResponseWriter, r *http.Request) {
 		"ProbeLines":  s.probeLines(id),
 		"Uptime":      s.detailUptime(id),
 	})
+}
+
+// hostView sind die aufbereiteten Betriebssystem-Werte eines Hosts für die Detailseite ("–" = nicht erfasst).
+type hostView struct{ Uptime, Load, Mem, Swap, Reboot string }
+
+func hostViewOf(h report.Host, now time.Time) hostView {
+	v := hostView{Uptime: "–", Load: "–", Mem: "–", Swap: "–", Reboot: "nein"}
+	o := h.OS
+	if o == nil {
+		return v
+	}
+	if o.UptimeS != nil {
+		v.Uptime = status.Duration(time.Duration(*o.UptimeS) * time.Second)
+	}
+	if o.Load1 != nil {
+		v.Load = fmt.Sprintf("%.2f", *o.Load1)
+		if o.CPUs > 0 {
+			v.Load += fmt.Sprintf(" (%d CPU)", o.CPUs)
+		}
+	}
+	if o.MemAvailPct != nil {
+		v.Mem = fmt.Sprintf("%d %% verfügbar", *o.MemAvailPct)
+	}
+	if o.SwapUsedPct != nil {
+		v.Swap = fmt.Sprintf("%d %% belegt", *o.SwapUsedPct)
+	}
+	if o.RebootRequired {
+		v.Reboot = "ja"
+		if o.RebootSince != nil {
+			v.Reboot += ", seit " + status.Duration(now.Sub(*o.RebootSince))
+		}
+	}
+	return v
 }
 
 // lessFold sortiert ohne Rücksicht auf Groß- und Kleinschreibung; bei Gleichheit entscheidet die genaue Schreibweise, damit die Reihenfolge stabil bleibt.

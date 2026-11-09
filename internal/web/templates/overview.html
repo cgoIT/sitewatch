@@ -8,7 +8,7 @@
   <div class="tile"><div class="k">Sites überwacht</div><div class="v">{{.Tiles.Total}}</div><div class="s">davon {{.Tiles.Contao}} Contao, {{.Tiles.PHP}} reines PHP</div></div>
   <div class="tile crit"><div class="k" style="color:#B3261E;font-weight:500">■ Kritisch</div><div class="v">{{.Tiles.Crit}}</div><div class="s">Sicherheitslücke oder keine Meldung</div></div>
   <div class="tile"><div class="k" style="color:#8A5A00;font-weight:500">▲ Warnung</div><div class="v">{{.Tiles.Warn}}</div><div class="s">Updates offen oder Version veraltet</div></div>
-  <div class="tile"><div class="k">Updates verfügbar</div><div class="v">{{.Tiles.Updates}}</div><div class="s">Pakete über alle Contao-Sites</div></div>
+  <div class="tile"><div class="k">Updates verfügbar</div><div class="v">{{.Tiles.Updates}}</div><div class="s">Pakete über alle Sites und Hosts</div></div>
 </div>
 {{template "filter" .}}
 {{if or .Rows (not .Hosts)}}<section class="card">
@@ -33,13 +33,13 @@
 {{if .Hosts}}<section class="card">
   <h2>Hosts</h2>
   <div class="scroll"><table>
-    <thead><tr><th>Host</th><th>Platz frei</th><th>Letztes Backup</th><th>MariaDB</th><th>Nginx</th><th>Letzte Meldung</th><th>Status</th></tr></thead>
+    <thead><tr><th>Host</th><th>Updates (apt)</th><th>Platz frei</th><th>Letztes Backup</th><th>MariaDB</th><th>Nginx</th><th>Letzte Meldung</th><th>Status</th></tr></thead>
     <tbody>
     {{range .Hosts}}
     <tr>
       <td>{{template "kindicon" .Kind}}{{if .Fav}}<img class="fav" src="/sites/{{.ID}}/icon?v={{.Fav}}" width="16" height="16" alt="">{{end}}<a href="/sites/{{.ID}}" style="font-weight:500;text-decoration:none">{{.Name}}</a><div class="sub">{{.URL}}</div>
         {{if .Reasons}}<ul class="reasons">{{range .Reasons}}<li>{{.}}</li>{{end}}</ul>{{end}}</td>
-      <td class="mono" data-label="Platz frei"><span class="lvb {{.DiskLevel}}">{{.Disk}}</span></td><td class="mono" data-label="Letztes Backup"><span class="lvb {{.BackupLevel}}">{{.Backup}}</span></td><td class="mono" data-label="MariaDB">{{.MariaDB}}</td><td class="mono" data-label="Nginx">{{.Nginx}}</td>
+      <td class="mono" data-label="Updates (apt)"><span class="lvb {{.OSUpdatesLevel}}">{{.OSUpdates}}</span></td><td class="mono" data-label="Platz frei"><span class="lvb {{.DiskLevel}}">{{.Disk}}</span></td><td class="mono" data-label="Letztes Backup"><span class="lvb {{.BackupLevel}}">{{.Backup}}</span></td><td class="mono" data-label="MariaDB">{{.MariaDB}}</td><td class="mono" data-label="Nginx">{{.Nginx}}</td>
       <td data-label="Letzte Meldung">{{.Seen}}</td>
       <td data-label="Status"><span class="badge {{.Level}}">{{.Icon}} {{.Label}}</span>{{if .Maintenance}}<span class="badge maint">Wartung</span>{{end}}</td>
     </tr>

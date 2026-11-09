@@ -41,6 +41,7 @@ type Config struct {
 	NoNginx        bool     // Site hat keinen nginx bzw. keine DB: nicht suchen, kein Problem melden
 	NoMariaDB      bool
 	NoSMART        bool     // keine SMART-Abfrage (VM ohne echte Platten)
+	NoHostInfo     bool     // keine OS-, Netzwerk-, apt- und systemd-Abfrage (Tests)
 	Host           bool     // freien Speicher erfassen und nginx/MariaDB auf dem Server suchen (konfigurierte Wrapper in Nginx/MariaDB gelten auch ohne)
 	Env            []string // zusätzliche Umgebung (KEY=wert) für composer/php, z. B. SITE_DIR für die Docker-Wrapper
 	Now            func() time.Time
@@ -315,6 +316,9 @@ func collectHost(ctx context.Context, cfg Config, r *report.Report, problem func
 	}
 	if cfg.Host {
 		collectRAID(r)
+		if !cfg.NoHostInfo {
+			collectHostInfo(ctx, cfg, r, cfg.Now().UTC(), problem)
+		}
 		if !cfg.NoSMART {
 			collectSMART(ctx, cfg, r, problem)
 		}

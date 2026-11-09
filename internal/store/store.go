@@ -36,7 +36,7 @@ type Sample struct {
 func SampleOf(e Entry, level int) Sample {
 	r := e.Report
 	s := Sample{
-		At: r.CollectedAt, Level: level, DiskFreePct: r.Host.DiskFreePct, OpenUpdates: r.Site.OpenUpdates(),
+		At: r.CollectedAt, Level: level, DiskFreePct: r.Host.DiskFreePct, OpenUpdates: r.Site.OpenUpdates() + r.Host.OpenOSUpdates(), // Composer- plus Betriebssystem-Pakete
 		PendingMigrations: r.Site.PendingMigrations,
 		Contao:            r.Site.Contao, PHP: r.Site.PHP, MariaDB: r.Host.MariaDB, Nginx: r.Host.Nginx,
 	}

@@ -157,6 +157,21 @@ Die meisten Aktionen rufen `<SITE_DIR>/bin/site <befehl>` auf (das Werkzeug des 
 Contao-Konsole. Es gibt keine freie Shell. `bin/site` läuft als Benutzer des Agenten (meist root) und darf deshalb nicht vom
 Web-Benutzer beschreibbar sein.
 
+## Host-Einträge: System, Netzwerk, Updates, Dienste
+
+Ein `host`-Eintrag hat eine eigene Detailseite und in der Übersicht eine eigene Tabelle. Der Agent erfasst rein lesend (Linux):
+
+- **System:** Distribution, Kernel, Betriebszeit, Last, freier Arbeitsspeicher, Swap und ob ein Neustart aussteht (`/run/reboot-required`).
+  Steht der Neustart länger aus als „Ausstehender Neustart: Warnung nach“ (Einstellungen, Standard 7 Tage), warnt Sitewatch.
+- **Netzwerk:** aktive Schnittstellen mit Adressen und MAC, IPv4-Standardroute, DNS-Server. Docker-/veth-/Bridge-Schnittstellen und
+  link-lokale Adressen blendet der Agent aus. Die Angaben liegen in der Datenbank von Sitewatch (hinter dem Login).
+- **Betriebssystem-Updates:** `apt list --upgradable` (ohne Netzzugriff, aus den lokalen Paketlisten). Sicherheitsupdates (Quelle mit
+  `-security`) sind eine Warnung, normale Updates werden nur gezählt. Sind die Paketlisten älter als 3 Tage, steht ein Hinweis unter
+  „Nicht ermittelt“, weil die Zahl dann zu niedrig sein kann. Ohne `apt` bleibt der Bereich leer.
+- **Systemdienste:** `systemctl list-units --state=failed`; jede fehlgeschlagene Unit ist eine Warnung. Ohne systemd bleibt der Bereich leer.
+
+Das Feld `site.outdated` (Composer) bleibt Contao-/PHP-Sites vorbehalten; für Hosts zählt `host.os_updates`.
+
 ## Weckruf und TLS-Prüfung für Contao-Bundles
 
 Hat ein Contao-Bundle-Agent eine Seiten-URL (https), prüft Sitewatch alle sechs Stunden per TLS-Handshake das Ablaufdatum des Zertifikats

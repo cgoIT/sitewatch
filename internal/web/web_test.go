@@ -383,3 +383,32 @@ func TestSiteIcon(t *testing.T) {
 		}
 	}
 }
+
+func TestHostDetailShowsOSNetworkUpdates(t *testing.T) {
+	srv, tok, now := setup(t)
+	rep := report.Report{Schema: 1, CollectedAt: now, Site: report.Site{ID: "kunde-c", Name: "Server 1", Kind: "host"}, Host: report.Host{
+		OS:      &report.OSInfo{Name: "Debian GNU/Linux 12", Kernel: "6.1.0"},
+		Network: &report.Network{Gateway: "10.0.0.1", Interfaces: []report.Iface{{Name: "eth0", Addrs: []string{"10.0.0.2/24"}}}},
+		Updates: &report.OSUpdates{Manager: "apt", Total: 2, Security: 1, Packages: []report.OSPackage{{Name: "curl", Installed: "1", New: "2", Security: true}}},
+		Systemd: &report.Systemd{Failed: []string{"foo.service"}},
+	}}
+	if w := post(srv, tok, rep); w.Code != http.StatusNoContent {
+		t.Fatalf("Ingest: %d %s", w.Code, w.Body.String())
+	}
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/sites/kunde-c", nil))
+	body := w.Body.String()
+	for _, want := range []string{"Debian GNU/Linux 12", "10.0.0.2/24", "10.0.0.1", "foo.service", "Betriebssystem-Updates", ">curl<", "Sicherheit"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("%q fehlt auf der Host-Detailseite", want)
+		}
+	}
+	if strings.Contains(body, "Pakete mit Updates") || strings.Contains(body, "Letzte Fehler") {
+		t.Errorf("Contao-Karten dürfen bei Hosts nicht erscheinen")
+	}
+	w = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/", nil))
+	if !strings.Contains(w.Body.String(), "2 (1 Sicherheit)") {
+		t.Errorf("Übersicht zeigt die apt-Updates nicht")
+	}
+}
