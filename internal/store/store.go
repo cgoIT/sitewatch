@@ -26,8 +26,10 @@ type Sample struct {
 	PendingMigrations *int
 	CronAgeSec        *int // Alter des letzten Cron-Laufs zum Zeitpunkt des Reports
 	BackupAgeSec      *int
-	BadSectors        *int // Summe über alle Platten (SMART); bei verdichteten Punkten das Maximum im Block
-	RaidMissing       *int // fehlende Platten in allen RAID-Verbünden; bei verdichteten Punkten das Maximum im Block
+	BadSectors        *int   // Summe über alle Platten (SMART); bei verdichteten Punkten das Maximum im Block
+	RaidMissing       *int   // fehlende Platten in allen RAID-Verbünden; bei verdichteten Punkten das Maximum im Block
+	WearPct           *int   // nur in Plattenreihen (web), nie aus samples
+	WrittenBytes      *int64 // dito; in der Kurve „pro Tag“ die Differenz der Tageswerte
 	Contao, PHP       string
 	MariaDB, Nginx    string
 }
