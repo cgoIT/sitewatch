@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"sitewatch/internal/idn"
 	"strings"
 	"time"
 
@@ -35,7 +36,9 @@ var (
 
 // sameSite: gleicher Host (ein "www." davor zählt nicht) und gleicher Port.
 func sameSite(a, b *url.URL) bool {
-	host := func(u *url.URL) string { return strings.TrimPrefix(strings.ToLower(u.Hostname()), "www.") }
+	host := func(u *url.URL) string {
+		return strings.TrimPrefix(strings.ToLower(idn.ASCIIHost(u.Hostname())), "www.")
+	}
 	port := func(u *url.URL) string {
 		if p := u.Port(); p != "" {
 			return p

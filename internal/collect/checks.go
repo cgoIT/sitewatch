@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sitewatch/internal/idn"
 	"time"
 )
 
@@ -23,14 +24,15 @@ func tlsExpiry(ctx context.Context, rawURL string) (expires time.Time, verr, err
 	if port == "" {
 		port = "443"
 	}
+	host := idn.ASCIIHost(u.Hostname())
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	d := tls.Dialer{Config: &tls.Config{
-		ServerName: u.Hostname(),
+		ServerName: host,
 		// Handshake ohne Prüfung, damit auch ein abgelaufenes Zertifikat lesbar ist; geprüft wird unten selbst.
 		InsecureSkipVerify: true,
 	}}
-	conn, err := d.DialContext(ctx, "tcp", net.JoinHostPort(u.Hostname(), port))
+	conn, err := d.DialContext(ctx, "tcp", net.JoinHostPort(host, port))
 	if err != nil {
 		return time.Time{}, nil, err
 	}
@@ -39,7 +41,7 @@ func tlsExpiry(ctx context.Context, rawURL string) (expires time.Time, verr, err
 	if len(certs) == 0 {
 		return time.Time{}, nil, errors.New("kein Zertifikat erhalten")
 	}
-	opts := x509.VerifyOptions{DNSName: u.Hostname(), Intermediates: x509.NewCertPool()}
+	opts := x509.VerifyOptions{DNSName: host, Intermediates: x509.NewCertPool()}
 	for _, c := range certs[1:] {
 		opts.Intermediates.AddCert(c)
 	}

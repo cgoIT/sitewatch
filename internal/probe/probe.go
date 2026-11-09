@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"sitewatch/internal/idn"
 	"strings"
 	"sync"
 	"syscall"
@@ -141,7 +142,7 @@ func target(raw string) (*url.URL, string, error) {
 	if port == "" {
 		port = "443"
 	}
-	return u, net.JoinHostPort(u.Hostname(), port), nil
+	return u, net.JoinHostPort(idn.ASCIIHost(u.Hostname()), port), nil
 }
 
 // CertExpiry liest den Ablauf des Zertifikats per TLS-Handshake; es wird nichts gesendet.
@@ -154,7 +155,7 @@ func (p *Prober) CertExpiry(ctx context.Context, raw string) (time.Time, error) 
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	td := tls.Dialer{NetDialer: p.dialer(), Config: &tls.Config{ServerName: u.Hostname(), InsecureSkipVerify: true}} //nolint:gosec // siehe shortcut
+	td := tls.Dialer{NetDialer: p.dialer(), Config: &tls.Config{ServerName: idn.ASCIIHost(u.Hostname()), InsecureSkipVerify: true}} //nolint:gosec // siehe shortcut
 	conn, err := td.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return time.Time{}, err
