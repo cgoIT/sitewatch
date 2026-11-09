@@ -127,6 +127,7 @@ func (r Raid) Missing() int {
 type Disk struct {
 	Device     string `json:"device"`
 	Model      string `json:"model,omitempty"`
+	Serial     string `json:"serial,omitempty"`      // Seriennummer; bleibt beim Umbenennen des Geräts (sdd → sde) gleich
 	Passed     *bool  `json:"passed"`                // Gesamturteil des Geräts (SMART overall-health); false = Ausfall droht
 	TempC      *int   `json:"temp_c,omitempty"`      // nil = unbekannt
 	BadSectors *int   `json:"bad_sectors,omitempty"` // ATA: Reallocated + Pending + Offline Uncorrectable; NVMe: Media Errors; nil = unbekannt
@@ -170,6 +171,14 @@ type Package struct {
 
 // Failed meldet, ob SMART der Platte einen Fehler bescheinigt; Bad liefert die defekten Sektoren (0 = keine oder unbekannt).
 func (d Disk) Failed() bool { return d.Passed != nil && !*d.Passed }
+
+// Key identifiziert die Platte über Neustarts hinweg: Seriennummer, sonst der Gerätename.
+func (d Disk) Key() string {
+	if d.Serial != "" {
+		return "sn:" + d.Serial
+	}
+	return "dev:" + d.Device
+}
 
 // Temp liefert die Temperatur in °C; 0 = unbekannt (auch ein 0 °C aus älteren Reports gilt so).
 func (d Disk) Temp() int {
@@ -251,7 +260,7 @@ func (r *Report) Validate(now time.Time) error {
 		return errors.New("last_backup liegt in der Zukunft")
 	}
 	for _, d := range r.Host.Disks {
-		if len(d.Device) > 128 || len(d.Model) > 128 || badInt(d.BadSectors) || badInt(d.TempC) {
+		if len(d.Device) > 128 || len(d.Model) > 128 || len(d.Serial) > 128 || badInt(d.BadSectors) || badInt(d.TempC) {
 			return errors.New("ungültige Plattenangabe")
 		}
 	}

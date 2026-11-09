@@ -66,6 +66,7 @@ func smartArgs(typ, name string) []string {
 func ParseSMART(data string) (report.Disk, bool) {
 	var doc struct {
 		Model  string `json:"model_name"`
+		Serial string `json:"serial_number"`
 		Status *struct {
 			Passed *bool `json:"passed"`
 		} `json:"smart_status"`
@@ -87,7 +88,7 @@ func ParseSMART(data string) (report.Disk, bool) {
 	if json.Unmarshal([]byte(data), &doc) != nil || doc.Status == nil || doc.Status.Passed == nil {
 		return report.Disk{}, false
 	}
-	d := report.Disk{Model: doc.Model, Passed: doc.Status.Passed}
+	d := report.Disk{Model: doc.Model, Serial: strings.TrimSpace(doc.Serial), Passed: doc.Status.Passed}
 	if doc.Temp != nil && doc.Temp.Current != nil && *doc.Temp.Current > 0 { // 0 °C heißt: nicht ermittelt
 		d.TempC = doc.Temp.Current
 	}

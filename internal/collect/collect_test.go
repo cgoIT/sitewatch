@@ -267,3 +267,13 @@ func TestSmartArgs(t *testing.T) {
 		}
 	}
 }
+
+func TestParseSMARTSerial(t *testing.T) {
+	d, ok := ParseSMART(`{"serial_number":" 14100C06C859 ","smart_status":{"passed":true}}`)
+	if !ok || d.Serial != "14100C06C859" || d.Key() != "sn:14100C06C859" {
+		t.Errorf("%+v", d)
+	}
+	if d, _ := ParseSMART(`{"smart_status":{"passed":true}}`); d.Serial != "" {
+		t.Errorf("ohne Seriennummer: %+v", d)
+	}
+}

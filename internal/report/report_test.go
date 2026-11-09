@@ -104,3 +104,17 @@ func TestValidateHostDetails(t *testing.T) {
 		}
 	}
 }
+
+func TestDiskKeyAndSerialLimit(t *testing.T) {
+	if k := (Disk{Device: "/dev/sdd", Serial: "S1"}).Key(); k != "sn:S1" {
+		t.Errorf("mit Seriennummer: %q", k)
+	}
+	if k := (Disk{Device: "/dev/sdd"}).Key(); k != "dev:/dev/sdd" {
+		t.Errorf("ohne Seriennummer: %q", k)
+	}
+	now := time.Now()
+	r := Report{Schema: SchemaVersion, CollectedAt: now, Site: Site{ID: "a", Kind: "host"}, Host: Host{Disks: []Disk{{Device: "/dev/sda", Serial: string(make([]byte, 129))}}}}
+	if r.Validate(now) == nil {
+		t.Error("zu lange Seriennummer muss abgelehnt werden")
+	}
+}
