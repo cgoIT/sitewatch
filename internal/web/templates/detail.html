@@ -79,10 +79,10 @@
       {{range .Trend.Changes}}<dt>{{fmtDate .At}} · {{.Product}}</dt><dd class="mono">{{.From}} → {{.To}}</dd>{{end}}
     </dl></div></section>{{end}}
     {{if .R.Site.Problems}}<section class="card"><h2>Nicht ermittelt</h2><div class="pad"><ul class="reasons" style="margin:0">{{range .R.Site.Problems}}<li>{{.}}</li>{{end}}</ul></div></section>{{end}}
-    <section class="card verlauf"><h2>Verlauf</h2><div class="scroll"><table class="compact" style="min-width:0">
+    <section class="card verlauf"><details><summary style="cursor:pointer;padding:16px 20px;font-size:16px;font-weight:600">Verlauf <span class="muted" style="font-weight:400">· letzte Meldungen</span></summary><div class="scroll"><table class="compact" style="min-width:0">
       <thead><tr><th>Erstellt</th><th>Updates</th><th>Fehler</th></tr></thead><tbody>
       {{range .History}}<tr><td class="mono" data-label="Erstellt">{{fmtTime .At}}</td><td class="mono" data-label="Updates">{{.OpenUpdates}}</td><td class="mono" data-label="Fehler">{{.Errors}}</td></tr>{{end}}
-      </tbody></table></div></section>
+      </tbody></table></div></details></section>
   </div>
   <div class="col-b">
     {{if eq .R.Site.Kind "host"}}

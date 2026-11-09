@@ -13,7 +13,7 @@
   <label class="f">Intervall (z. B. 5m, mindestens 30s; leer = 5m)<input name="interval" value="{{.Interval}}"></label>
 </div></div></section>
 <section class="card"><h2>Sites</h2><div class="pad">
-{{range .Sites}}<details class="site"{{if or (not .ID) $.Error (eq (len $.Sites) 2)}} open{{end}}><summary>{{if .ID}}{{.ID}}{{if .Name}} · {{.Name}}{{end}} <span class="muted">{{.Kind}}{{if .URL}} · {{.URL}}{{end}}</span>{{else}}Neue Site (leer lassen = keine){{end}}</summary>
+{{range .Sites}}<details class="site"{{if or (not .ID) $.Error}} open{{end}}><summary>{{if .ID}}{{.ID}}{{if .Name}} · {{.Name}}{{end}} <span class="muted">{{.Kind}}{{if .URL}} · {{.URL}}{{end}}</span>{{else}}Neue Site (leer lassen = keine){{end}}</summary>
   <div class="fgrid">
     <label class="f">ID<input name="s{{.N}}_id" value="{{.ID}}" pattern="[a-z0-9\-]*"></label>
     <label class="f">Anzeigename<input name="s{{.N}}_name" value="{{.Name}}"></label>

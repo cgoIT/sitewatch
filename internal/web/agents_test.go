@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"sitewatch/internal/agentcfg"
 	"sitewatch/internal/probe"
 	"sitewatch/internal/report"
 	"sitewatch/internal/sign"
@@ -422,5 +423,21 @@ func TestAgentRename(t *testing.T) {
 	}
 	if w := do(srv, "POST", "/agents/gibtsnicht/rename", url.Values{"new_id": {"x"}}, nil); w.Code != 404 {
 		t.Errorf("unbekannter Agent: %d", w.Code)
+	}
+}
+
+func TestAgentSitesCollapsedByDefault(t *testing.T) {
+	srv, _ := setupAgents(t)
+	do(srv, "POST", "/agents", url.Values{"id": {"server1"}}, nil)
+	cfg := agentcfg.Remote{Sites: []agentcfg.Site{{ID: "kunde", Kind: "php", Path: "/var/www/kunde"}}}
+	if err := srv.Agents.Save("server1", cfg, srv.Now()); err != nil {
+		t.Fatal(err)
+	}
+	body := do(srv, "GET", "/agents/server1", nil, nil).Body.String()
+	if strings.Count(body, `<details class="site">`) != 1 || strings.Count(body, `<details class="site" open>`) != 1 {
+		t.Errorf("vorhandene Site muss zugeklappt, die neue Zeile offen sein")
+	}
+	if !strings.Contains(do(srv, "GET", "/agents/server1?error=x", nil, nil).Body.String(), `<details class="site" open>`) || strings.Count(do(srv, "GET", "/agents/server1?error=x", nil, nil).Body.String(), `<details class="site">`) != 0 {
+		t.Errorf("bei einem Fehler müssen alle Sites offen sein")
 	}
 }
