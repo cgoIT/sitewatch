@@ -349,13 +349,10 @@ func (s *Store) Rename(oldID, newID string, now time.Time) error {
 	}
 	idx := -1
 	for i, a := range as {
-		switch a.ID {
-		case newID:
-			if newID != oldID {
-				return fmt.Errorf("Agent %q gibt es schon", newID)
-			}
-		case oldID:
+		if a.ID == oldID {
 			idx = i
+		} else if a.ID == newID {
+			return fmt.Errorf("Agent %q gibt es schon", newID)
 		}
 	}
 	if idx < 0 {

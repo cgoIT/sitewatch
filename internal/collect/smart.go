@@ -51,11 +51,11 @@ func collectSMART(ctx context.Context, cfg Config, r *report.Report, problem fun
 }
 
 // smartArgs baut die Argumente für eine Platte. Der Typ aus --scan wird nur für Controller-Typen übernommen, die smartctl nicht selbst
-// erkennt (megaraid,N, 3ware,N, cciss,N ...). "scsi" (meldet --scan auch für SATA-Platten hinter dem SCSI-Layer) und "sat" bleiben der
-// Autoerkennung überlassen: mit "-d scsi" fehlen bei SATA-Platten die ATA-Attribute, also Temperatur und defekte Sektoren.
+// erkennt (megaraid,N, 3ware,N, cciss,N ...). "scsi" (meldet --scan auch für SATA-Platten hinter dem SCSI-Layer) bleibt der
+// Autoerkennung überlassen ("sat" wird übernommen, USB-Adapter brauchen es): mit "-d scsi" fehlen bei SATA-Platten die ATA-Attribute, also Temperatur und defekte Sektoren.
 func smartArgs(typ, name string) []string {
 	args := []string{"-j", "-H", "-A"}
-	if typ != "" && typ != "scsi" && typ != "sat" {
+	if typ != "" && typ != "scsi" {
 		args = append(args, "-d", typ)
 	}
 	return append(args, name)

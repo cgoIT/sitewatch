@@ -21,3 +21,17 @@ func TestASCIIHost(t *testing.T) {
 		}
 	}
 }
+
+func TestASCIIHostEdgeCases(t *testing.T) {
+	for in, want := range map[string]string{
+		"a..b":       "a..b",
+		".bücher.de": ".xn--bcher-kva.de",
+		"bücher.de.": "xn--bcher-kva.de.",
+		"BÜcher.de":  "xn--bcher-kva.de",
+		"":           "",
+	} {
+		if got := ASCIIHost(in); got != want {
+			t.Errorf("ASCIIHost(%q) = %q, erwartet %q", in, got, want)
+		}
+	}
+}

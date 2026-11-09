@@ -181,6 +181,12 @@ func TestRename(t *testing.T) {
 	if err := s.Rename("bundle", "neu", now); err == nil {
 		t.Error("Bundle darf nicht umbenannt werden")
 	}
+	if err := s.Rename("alt", "alt", now); err != nil {
+		t.Errorf("gleiche ID muss nichts tun: %v", err)
+	}
+	if err := s.Rename("alt", "", now); err == nil {
+		t.Error("leere ID muss abgelehnt werden")
+	}
 	if err := s.Rename("gibtsnicht", "neu", now); err != ErrNotFound {
 		t.Errorf("unbekannt: %v", err)
 	}

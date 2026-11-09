@@ -411,6 +411,9 @@ func TestAgentRename(t *testing.T) {
 	if w := do(srv, "POST", "/agents/alt/rename", url.Values{"new_id": {"neu"}}, nil); w.Code != 303 || w.Header().Get("Location") != "/agents/neu" {
 		t.Fatalf("Umbenennen: %d %s", w.Code, w.Header().Get("Location"))
 	}
+	if _, ok := srv.fetched["alt"]; ok {
+		t.Error("fetched zog nicht um")
+	}
 	if _, err := srv.Agents.Get("alt"); err == nil {
 		t.Error("alte ID besteht noch")
 	}
