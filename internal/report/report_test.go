@@ -61,20 +61,24 @@ func TestContaoBundleReportMatchesSchema(t *testing.T) {
 
 func TestValidateDisksRaids(t *testing.T) {
 	now := time.Date(2026, 10, 27, 19, 0, 0, 0, time.UTC)
-	neg := -1
+	neg, big, negB := -1, 256, int64(-1)
 	for name, h := range map[string]Host{
-		"negative Sektoren": {Disks: []Disk{{Device: "/dev/sda", BadSectors: &neg}}},
-		"langer Name":       {Raids: []Raid{{Name: strings.Repeat("x", 129)}}},
-		"negative Anzahl":   {Raids: []Raid{{Name: "md0", Total: -2}}},
-		"zu viele Platten":  {Disks: make([]Disk, 65)},
+		"Verschleiß über 255": {Disks: []Disk{{Device: "/dev/nvme0n1", WearPct: &big}}},
+		"Reserve negativ":     {Disks: []Disk{{Device: "/dev/nvme0n1", SpareLeftPct: &neg}}},
+		"Bytes negativ":       {Disks: []Disk{{Device: "/dev/nvme0n1", WrittenBytes: &negB}}},
+		"negative Sektoren":   {Disks: []Disk{{Device: "/dev/sda", BadSectors: &neg}}},
+		"langer Name":         {Raids: []Raid{{Name: strings.Repeat("x", 129)}}},
+		"negative Anzahl":     {Raids: []Raid{{Name: "md0", Total: -2}}},
+		"zu viele Platten":    {Disks: make([]Disk, 65)},
 	} {
 		r := Report{Schema: SchemaVersion, Site: Site{ID: "a", Kind: "host"}, CollectedAt: now, Host: h}
 		if r.Validate(now) == nil {
 			t.Errorf("%s: erwartet Fehler", name)
 		}
 	}
+	ok255 := 255
 	r := Report{Schema: SchemaVersion, Site: Site{ID: "a", Kind: "host"}, CollectedAt: now,
-		Host: Host{Disks: []Disk{{Device: "/dev/sda"}}, Raids: []Raid{{Name: "md0", Total: 2, Active: 2}}}}
+		Host: Host{Disks: []Disk{{Device: "/dev/sda"}, {Device: "/dev/nvme0n1", WearPct: &ok255}}, Raids: []Raid{{Name: "md0", Total: 2, Active: 2}}}}
 	if err := r.Validate(now); err != nil {
 		t.Errorf("gültig: %v", err)
 	}

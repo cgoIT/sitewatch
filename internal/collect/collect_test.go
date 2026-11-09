@@ -277,3 +277,18 @@ func TestParseSMARTSerial(t *testing.T) {
 		t.Errorf("ohne Seriennummer: %+v", d)
 	}
 }
+
+func TestParseSMARTNVMeWear(t *testing.T) {
+	d, ok := ParseSMART(`{"smart_status":{"passed":true},"nvme_smart_health_information_log":{"media_errors":0,"percentage_used":247,"available_spare":100,"data_units_written":1000}}`)
+	if !ok || d.WearPct == nil || *d.WearPct != 247 || *d.SpareLeftPct != 100 || d.WrittenBytes == nil || *d.WrittenBytes != 512000000 {
+		t.Errorf("NVMe: ok=%v %+v", ok, d)
+	}
+	d, _ = ParseSMART(`{"smart_status":{"passed":true},"nvme_smart_health_information_log":{"media_errors":0}}`)
+	if d.WearPct != nil || d.SpareLeftPct != nil || d.WrittenBytes != nil {
+		t.Errorf("fehlende Felder müssen nil bleiben: %+v", d)
+	}
+	d, _ = ParseSMART(`{"smart_status":{"passed":true},"ata_smart_attributes":{"table":[{"id":5,"raw":{"value":0}}]}}`)
+	if d.WearPct != nil || d.SpareLeftPct != nil || d.WrittenBytes != nil {
+		t.Errorf("ATA: %+v", d)
+	}
+}

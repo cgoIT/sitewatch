@@ -3,6 +3,7 @@ package collect
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"strings"
 	"time"
 
@@ -82,7 +83,10 @@ func ParseSMART(data string) (report.Disk, bool) {
 			} `json:"table"`
 		} `json:"ata_smart_attributes"`
 		NVMe *struct {
-			MediaErrors int64 `json:"media_errors"`
+			MediaErrors  int64  `json:"media_errors"`
+			PercentUsed  *int   `json:"percentage_used"`
+			AvailSpare   *int   `json:"available_spare"`
+			UnitsWritten *int64 `json:"data_units_written"`
 		} `json:"nvme_smart_health_information_log"`
 	}
 	if json.Unmarshal([]byte(data), &doc) != nil || doc.Status == nil || doc.Status.Passed == nil {
@@ -100,6 +104,11 @@ func ParseSMART(data string) (report.Disk, bool) {
 	}
 	if doc.NVMe != nil {
 		bad, have = doc.NVMe.MediaErrors, true
+		d.WearPct, d.SpareLeftPct = doc.NVMe.PercentUsed, doc.NVMe.AvailSpare
+		if u := doc.NVMe.UnitsWritten; u != nil && *u >= 0 && *u <= math.MaxInt64/512000 { // eine Einheit = 1000 Sektoren à 512 Byte
+			b := *u * 512000
+			d.WrittenBytes = &b
+		}
 	}
 	if have {
 		n := int(min(bad, 1<<30))

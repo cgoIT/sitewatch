@@ -131,6 +131,10 @@ type Disk struct {
 	Passed     *bool  `json:"passed"`                // Gesamturteil des Geräts (SMART overall-health); false = Ausfall droht
 	TempC      *int   `json:"temp_c,omitempty"`      // nil = unbekannt
 	BadSectors *int   `json:"bad_sectors,omitempty"` // ATA: Reallocated + Pending + Offline Uncorrectable; NVMe: Media Errors; nil = unbekannt
+	// Nur NVMe, nil = unbekannt.
+	WearPct      *int   `json:"wear_pct,omitempty"`      // percentage_used; über 100 möglich, bis 255
+	SpareLeftPct *int   `json:"spare_pct,omitempty"`     // available_spare
+	WrittenBytes *int64 `json:"written_bytes,omitempty"` // data_units_written × 512000
 }
 
 // Site beschreibt die überwachte Webseite.
@@ -260,7 +264,7 @@ func (r *Report) Validate(now time.Time) error {
 		return errors.New("last_backup liegt in der Zukunft")
 	}
 	for _, d := range r.Host.Disks {
-		if len(d.Device) > 128 || len(d.Model) > 128 || len(d.Serial) > 128 || badInt(d.BadSectors) || badInt(d.TempC) {
+		if len(d.Device) > 128 || len(d.Model) > 128 || len(d.Serial) > 128 || badInt(d.BadSectors) || badInt(d.TempC) || badPct(d.WearPct) || badPct(d.SpareLeftPct) || (d.WrittenBytes != nil && *d.WrittenBytes < 0) {
 			return errors.New("ungültige Plattenangabe")
 		}
 	}
@@ -287,6 +291,8 @@ func (r *Report) Validate(now time.Time) error {
 }
 
 // badInt: negativ oder absurd groß (die Werte landen summiert im Verlauf).
+func badPct(p *int) bool { return p != nil && (*p < 0 || *p > 255) }
+
 func badInt(p *int) bool { return p != nil && (*p < 0 || *p > 1<<30) }
 
 func (h Host) validateDetails() error {
