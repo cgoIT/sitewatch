@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.5.0](https://github.com/cgoIT/sitewatch/compare/v1.4.0...v1.5.0) (2026-11-09)
+
+
+### Features
+
+* **agents:** Agent in der Oberfläche umbenennen ([2ace639](https://github.com/cgoIT/sitewatch/commit/2ace639d4bd8b59571c1ee7f6f1fc0a73216a5a7))
+* **web:** Sites im Agent-Formular als Akkordeon, kleinere Schrift für IP-Adressen ([6456017](https://github.com/cgoIT/sitewatch/commit/6456017fecbdf47e1c41fe2df10dcdb672ca526b))
+
+
+### Bug Fixes
+
+* **collect:** smartctl-Typ sat weiter übergeben; Tests für Umbenennen und IDN ergänzt ([804d0ad](https://github.com/cgoIT/sitewatch/commit/804d0ad4701bf42241861d54ad634d8a38cee4cc))
+* **collect:** smartctl-Typ scsi/sat der Autoerkennung überlassen (Temperatur und Sektoren bei SATA-Platten) ([1913f72](https://github.com/cgoIT/sitewatch/commit/1913f725fa45bd8b9eb53289331770c74af212a0))
+* **collect:** Temperatur 0 °C als unbekannt behandeln ([f4bd3c5](https://github.com/cgoIT/sitewatch/commit/f4bd3c5ea50f5fc5f2c95bedc9ba54514aa2545d))
+* **probe:** Domains mit Umlauten (IDN) für TLS-Prüfung und Favicons in Punycode wandeln ([de8b57f](https://github.com/cgoIT/sitewatch/commit/de8b57fe07990fc4942ca3c46170aa7287b63778))
+
 ## [1.4.0](https://github.com/cgoIT/sitewatch/compare/v1.3.0...v1.4.0) (2026-11-09)
 
 
