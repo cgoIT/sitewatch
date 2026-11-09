@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.6.0](https://github.com/cgoIT/sitewatch/compare/v1.5.0...v1.6.0) (2026-11-09)
+
+
+### Features
+
+* **report:** Seriennummer und Schlüssel je Platte ([758e9a0](https://github.com/cgoIT/sitewatch/commit/758e9a0031d5d5a9d4abb198dd6e44c9e9baed4e))
+* **status:** Warnung erst bei Anstieg über die Kenntnisnahme ([68ad993](https://github.com/cgoIT/sitewatch/commit/68ad99389570fc37a3f34ee56845d9c889dfe24c))
+* **store:** Kenntnisnahme defekter Sektoren (disk_acks) ([8d569d6](https://github.com/cgoIT/sitewatch/commit/8d569d693c00f999d166702b198be89604352ef6))
+* **web:** Netzwerk und Platten der Host-Detailseite unter die OS-Updates, kleinere Schrift in der Update-Tabelle ([f23eeab](https://github.com/cgoIT/sitewatch/commit/f23eeabc45d7b0bee50b00431dd761ba7da6c01d))
+* **web:** Platten auf der Host-Detailseite zur Kenntnis nehmen ([5094de6](https://github.com/cgoIT/sitewatch/commit/5094de6baa9c6f72f189a04c991f8124315444c5))
+* **web:** Verlauf und Sites im Agent-Formular standardmäßig zugeklappt ([e8e4a25](https://github.com/cgoIT/sitewatch/commit/e8e4a25ad6f7b12c34c92fe5dac7d4e13809121e))
+
 ## [1.5.0](https://github.com/cgoIT/sitewatch/compare/v1.4.0...v1.5.0) (2026-11-09)
 
 
