@@ -116,7 +116,7 @@ func TestHostViaConfiguredPrograms(t *testing.T) {
 		}
 		return p
 	}
-	cfg := Config{SiteID: "h", Kind: "host", Path: dir, NoSMART: true,
+	cfg := Config{SiteID: "h", Kind: "host", Path: dir, NoSMART: true, NoHostInfo: true,
 		Nginx:   script("ng", "echo 'nginx version: nginx/1.27.0' >&2"),
 		MariaDB: script("db", "echo 'mariadb  Ver 15.1 Distrib 11.4.2-MariaDB, for debian-linux-gnu'")}
 	r, err := Collect(context.Background(), cfg)
