@@ -474,3 +474,22 @@ func TestDiskAckFlow(t *testing.T) {
 		t.Error("Kenntnisnahme besteht noch")
 	}
 }
+
+func TestHostDetailLayoutOrder(t *testing.T) {
+	srv, tok, now := setup(t)
+	rep := report.Report{Schema: 1, CollectedAt: now, Site: report.Site{ID: "kunde-c", Name: "S", Kind: "host"}, Host: report.Host{
+		OS: &report.OSInfo{Name: "Debian"}, Network: &report.Network{}, Updates: &report.OSUpdates{Manager: "apt"}}}
+	if w := post(srv, tok, rep); w.Code != http.StatusNoContent {
+		t.Fatal(w.Code)
+	}
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/sites/kunde-c", nil))
+	body, last := w.Body.String(), -1
+	for _, h := range []string{"<h2>System</h2>", "<h2>Betriebssystem-Updates", "<h2>Netzwerk</h2>", "<h2>Speicher und Platten</h2>"} {
+		i := strings.Index(body, h)
+		if i < 0 || i < last {
+			t.Fatalf("%q fehlt oder steht an falscher Stelle", h)
+		}
+		last = i
+	}
+}

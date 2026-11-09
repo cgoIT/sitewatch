@@ -57,21 +57,6 @@
       <dt>Letztes Backup</dt><dd class="mono">{{if .R.Site.LastBackup}}{{fmtTime .R.Site.LastBackup}}{{else}}–{{end}}</dd>
       <dt>TLS läuft ab</dt><dd class="mono">{{if .R.Site.TLSExpires}}{{fmtDate .R.Site.TLSExpires}}{{else}}–{{end}}</dd>
     </dl></div></section>
-    <section class="card"><h2>Netzwerk</h2><div class="pad">{{with .R.Host.Network}}<dl class="kv">
-      {{range .Interfaces}}<dt>{{.Name}}</dt><dd class="mono" style="font-size:12px;overflow-wrap:anywhere">{{range .Addrs}}{{.}}<br>{{end}}{{if .MAC}}<span class="muted">{{.MAC}}</span>{{end}}</dd>
-      {{end}}<dt>Standardroute</dt><dd class="mono">{{or .Gateway "–"}}</dd>
-      <dt>DNS-Server</dt><dd class="mono">{{range .DNS}}{{.}}<br>{{else}}–{{end}}</dd>
-    </dl>{{else}}<span class="muted">Nicht erfasst.</span>{{end}}</div></section>
-    <section class="card"><h2>Speicher und Platten</h2><div class="pad"><dl class="kv">
-      <dt>Speicherplatz frei</dt><dd class="mono">{{if .R.Host.DiskFreePct}}{{.R.Host.DiskFreePct}} %{{else}}–{{end}}</dd>
-      {{range .R.Host.Disks}}{{$a := index $.DiskAcks .Key}}<dt>SMART {{.Device}}</dt><dd class="mono">{{if .Passed}}{{if .Failed}}FEHLER{{else}}OK{{end}}{{else}}–{{end}}{{if .Bad}}, {{.Bad}} defekte Sektoren{{end}}{{with .Temp}}, {{.}} °C{{end}}{{if .Model}}<div class="muted" style="font-size:12px">{{.Model}}{{if .Serial}} · {{.Serial}}{{end}}</div>{{end}}
-        {{if $a.Acked}}<div class="muted" style="font-size:12px">{{if $a.Worse}}▲ seit der Kenntnisnahme gestiegen (damals {{$a.Base}}, {{$a.At}}){{else}}bekannt seit {{$a.At}} ({{$a.Base}} Sektoren){{end}}</div>{{end}}
-        {{if and (not $.Day) (or $a.Acked $a.CanAck)}}<form method="post" action="/sites/{{$.R.Site.ID}}/disks" style="margin-top:4px"><input type="hidden" name="disk" value="{{.Key}}">
-          {{if or (not $a.Acked) $a.Worse}}{{if $a.CanAck}}<button class="btn" name="action" value="ack" type="submit">Zur Kenntnis nehmen</button>{{end}}{{end}}
-          {{if $a.Acked}}<button class="btn" name="action" value="clear" type="submit">Zurücknehmen</button>{{end}}</form>{{end}}</dd>
-      {{end}}{{range .R.Host.Raids}}<dt>RAID {{.Name}}</dt><dd class="mono">{{.Level}} {{.Active}}/{{.Total}}{{if .Inactive}}, inaktiv{{end}}{{if .Failed}}, {{.Failed}} defekt{{end}}{{if .Syncing}}, Abgleich läuft{{end}}</dd>
-      {{end}}
-    </dl></div></section>
     {{else}}
     <section class="card"><h2>Stack</h2><div class="pad"><dl class="kv">
       <dt>Contao</dt><dd class="mono">{{if .R.Site.Contao}}{{.R.Site.Contao}}{{else}}–{{end}}</dd>
@@ -103,10 +88,25 @@
     {{if eq .R.Site.Kind "host"}}
     <section class="card"><h2>Systemdienste</h2><div class="pad">{{with .R.Host.Systemd}}{{if .Failed}}<ul class="reasons" style="margin:0">{{range .Failed}}<li class="mono">{{.}}</li>{{end}}</ul><p class="muted" style="margin-bottom:0">Fehlgeschlagene Units; auf dem Server mit <span class="mono">systemctl --failed</span> prüfen.</p>{{else}}<span class="muted">Keine fehlgeschlagenen Units.</span>{{end}}{{else}}<span class="muted">Nicht erfasst (kein systemd).</span>{{end}}</div></section>
     <section class="card"><h2>Betriebssystem-Updates <span class="muted" style="font-weight:400">{{with .R.Host.Updates}}· {{.Total}} offen, davon {{.Security}} Sicherheit{{end}}</span></h2>
-      <div class="scroll"><table><thead><tr><th>Paket</th><th>Installiert</th><th>Verfügbar</th><th>Hinweis</th></tr></thead><tbody>
+      <div class="scroll"><table style="font-size:12px"><thead><tr><th>Paket</th><th>Installiert</th><th>Verfügbar</th><th>Hinweis</th></tr></thead><tbody>
       {{with .R.Host.Updates}}{{range .Packages}}<tr><td class="mono" data-label="Paket">{{.Name}}</td><td class="mono" data-label="Installiert">{{.Installed}}</td><td class="mono" data-label="Verfügbar">{{.New}}</td><td data-label="Hinweis">{{if .Security}}<span class="badge warn">▲ Sicherheit</span>{{end}}</td></tr>
       {{else}}<tr><td colspan="4" class="muted">Keine offenen Updates.</td></tr>{{end}}{{else}}<tr><td colspan="4" class="muted">Nicht erfasst (kein apt).</td></tr>{{end}}
       </tbody></table></div></section>
+    <section class="card"><h2>Netzwerk</h2><div class="pad">{{with .R.Host.Network}}<dl class="kv">
+      {{range .Interfaces}}<dt>{{.Name}}</dt><dd class="mono" style="font-size:12px;overflow-wrap:anywhere">{{range .Addrs}}{{.}}<br>{{end}}{{if .MAC}}<span class="muted">{{.MAC}}</span>{{end}}</dd>
+      {{end}}<dt>Standardroute</dt><dd class="mono">{{or .Gateway "–"}}</dd>
+      <dt>DNS-Server</dt><dd class="mono">{{range .DNS}}{{.}}<br>{{else}}–{{end}}</dd>
+    </dl>{{else}}<span class="muted">Nicht erfasst.</span>{{end}}</div></section>
+    <section class="card"><h2>Speicher und Platten</h2><div class="pad"><dl class="kv">
+      <dt>Speicherplatz frei</dt><dd class="mono">{{if .R.Host.DiskFreePct}}{{.R.Host.DiskFreePct}} %{{else}}–{{end}}</dd>
+      {{range .R.Host.Disks}}{{$a := index $.DiskAcks .Key}}<dt>SMART {{.Device}}</dt><dd class="mono">{{if .Passed}}{{if .Failed}}FEHLER{{else}}OK{{end}}{{else}}–{{end}}{{if .Bad}}, {{.Bad}} defekte Sektoren{{end}}{{with .Temp}}, {{.}} °C{{end}}{{if .Model}}<div class="muted" style="font-size:12px">{{.Model}}{{if .Serial}} · {{.Serial}}{{end}}</div>{{end}}
+        {{if $a.Acked}}<div class="muted" style="font-size:12px">{{if $a.Worse}}▲ seit der Kenntnisnahme gestiegen (damals {{$a.Base}}, {{$a.At}}){{else}}bekannt seit {{$a.At}} ({{$a.Base}} Sektoren){{end}}</div>{{end}}
+        {{if and (not $.Day) (or $a.Acked $a.CanAck)}}<form method="post" action="/sites/{{$.R.Site.ID}}/disks" style="margin-top:4px"><input type="hidden" name="disk" value="{{.Key}}">
+          {{if or (not $a.Acked) $a.Worse}}{{if $a.CanAck}}<button class="btn" name="action" value="ack" type="submit">Zur Kenntnis nehmen</button>{{end}}{{end}}
+          {{if $a.Acked}}<button class="btn" name="action" value="clear" type="submit">Zurücknehmen</button>{{end}}</form>{{end}}</dd>
+      {{end}}{{range .R.Host.Raids}}<dt>RAID {{.Name}}</dt><dd class="mono">{{.Level}} {{.Active}}/{{.Total}}{{if .Inactive}}, inaktiv{{end}}{{if .Failed}}, {{.Failed}} defekt{{end}}{{if .Syncing}}, Abgleich läuft{{end}}</dd>
+      {{end}}
+    </dl></div></section>
     {{else}}
     <section class="card"><h2>Pakete mit Updates <span class="muted" style="font-weight:400">· {{.OpenUpdates}} offen von {{.R.Site.PackagesTotal}}</span></h2>
       <div class="scroll"><table><thead><tr><th>Paket</th><th>Installiert</th><th>Verfügbar</th><th>Hinweis</th></tr></thead><tbody>
