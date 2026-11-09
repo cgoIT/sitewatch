@@ -48,6 +48,9 @@ var Fields = []Field{
 	durField("backup_max_hours", gBackup, "Letztes Backup: Warnung, wenn älter als", "Stunden", time.Hour, func(c *Config) *time.Duration { return &c.BackupMax }),
 	intField("disk_warn_pct", gDisk, "Freier Speicher: Warnung unter", "%", func(c *Config) *int { return &c.DiskWarn }),
 	intField("disk_crit_pct", gDisk, "Freier Speicher: kritisch unter", "%", func(c *Config) *int { return &c.DiskCrit }),
+	intField("disk_wear_warn_pct", gDisk, "NVMe-Verschleiß: Warnung ab", "%", func(c *Config) *int { return &c.DiskWearWarn }),
+	intField("disk_wear_crit_pct", gDisk, "NVMe-Verschleiß: kritisch ab", "%", func(c *Config) *int { return &c.DiskWearCrit }),
+	intField("disk_spare_warn_pct", gDisk, "NVMe-Reserve: Warnung unter", "%", func(c *Config) *int { return &c.DiskSpareWarn }),
 	durField("reboot_warn_days", gHostOS, "Ausstehender Neustart: Warnung nach", "Tage", 24*time.Hour, func(c *Config) *time.Duration { return &c.RebootWarn }),
 	durField("cron_warn_minutes", gCron, "Letzter Cron-Lauf: Warnung, wenn älter als", "Minuten", time.Minute, func(c *Config) *time.Duration { return &c.CronWarn }),
 	durField("cron_crit_minutes", gCron, "Letzter Cron-Lauf: kritisch, wenn älter als", "Minuten", time.Minute, func(c *Config) *time.Duration { return &c.CronCrit }),
@@ -126,6 +129,8 @@ func (c Config) with(vals map[string]int) (Config, error) {
 	switch r := c.Retention; {
 	case c.DiskWarn > 100 || c.DiskCrit > c.DiskWarn:
 		return c, fmt.Errorf("Freier Speicher: kritisch darf nicht über der Warnung liegen, die Warnung höchstens 100 %%")
+	case c.DiskWearWarn > c.DiskWearCrit || c.DiskSpareWarn > 100:
+		return c, fmt.Errorf("NVMe: die Verschleiß-Warnung darf nicht über dem kritischen Wert liegen, die Reserve höchstens 100 %%")
 	case c.BundlePingAfter >= c.BundleStaleAfter:
 		return c, fmt.Errorf("Weckruf: muss früher kommen als die kritische Meldung „Keine Meldung seit“ des Contao-Bundles")
 	case c.UptimeWarnPct > 100:

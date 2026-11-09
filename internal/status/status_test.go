@@ -207,3 +207,20 @@ func TestEvaluateDiskAck(t *testing.T) {
 		t.Errorf("SMART failed bleibt auch bei Kenntnisnahme kritisch: %v", got)
 	}
 }
+
+func TestEvaluateNVMeWear(t *testing.T) {
+	tr := true
+	lv := func(wear, spare *int) Level {
+		r := &report.Report{Site: report.Site{ID: "a", Kind: "host"}, Host: report.Host{Disks: []report.Disk{{Device: "/dev/nvme0n1", Passed: &tr, WearPct: wear, SpareLeftPct: spare}}}}
+		return Evaluate(r, now, now, DefaultConfig()).Level
+	}
+	p := func(n int) *int { return &n }
+	for _, c := range []struct {
+		wear, spare *int
+		want        Level
+	}{{p(79), nil, OK}, {p(80), nil, Warn}, {p(100), nil, Crit}, {p(247), nil, Crit}, {nil, nil, OK}, {nil, p(49), Warn}, {nil, p(50), OK}} {
+		if got := lv(c.wear, c.spare); got != c.want {
+			t.Errorf("wear=%v spare=%v: %v, erwartet %v", c.wear, c.spare, got, c.want)
+		}
+	}
+}

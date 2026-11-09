@@ -50,7 +50,7 @@ const baseVersion = 1
 
 // migrations: Eintrag i hebt die Datenbank von Version baseVersion+i auf baseVersion+i+1. Jeder läuft in einer eigenen Transaktion
 // zusammen mit dem Setzen der Version, ein Fehler lässt die Datenbank unverändert.
-var migrations = []func(tx *sql.Tx) error{migrateUptime, migratePush, migrateDiskHealth, migrateFavicon, migrateDiskAcks}
+var migrations = []func(tx *sql.Tx) error{migrateUptime, migratePush, migrateDiskHealth, migrateFavicon, migrateDiskAcks, migrateDiskWear}
 
 // migrate bringt die Datenbank auf die aktuelle Version. Eine neuere Datenbank (Programm zurückgerollt) wird nicht angefasst.
 // Die Version wird je Schritt innerhalb der Transaktion gelesen: Starten zwei Prozesse gleichzeitig, führt nur einer eine Migration aus.
@@ -191,6 +191,19 @@ func (s *SQLite) save(e Entry, level int) error {
 		id, sm.At.Unix(), sm.Level, nullInt(sm.DiskFreePct), sm.OpenUpdates, sm.Errors, nullInt(sm.PendingMigrations),
 		nullInt(sm.CronAgeSec), nullInt(sm.BackupAgeSec), sm.Contao, sm.PHP, sm.MariaDB, sm.Nginx, nullInt(sm.BadSectors), nullInt(sm.RaidMissing)); err != nil {
 		return err
+	}
+	for _, d := range e.Report.Host.Disks {
+		if d.WearPct == nil && d.WrittenBytes == nil {
+			continue
+		}
+		var b any
+		if d.WrittenBytes != nil {
+			b = *d.WrittenBytes
+		}
+		if _, err := tx.Exec(`INSERT OR REPLACE INTO disk_wear(site_id, disk, at, device, wear_pct, written_bytes) VALUES(?,?,?,?,?,?)`,
+			id, d.Key(), sm.At.Unix(), d.Device, nullInt(d.WearPct), b); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }
@@ -374,6 +387,7 @@ func (s *SQLite) DeleteSite(siteID string) error {
 		`DELETE FROM uptime_site WHERE site_id=?`,
 		`DELETE FROM favicons WHERE site_id=?`,
 		`DELETE FROM disk_acks WHERE site_id=?`,
+		`DELETE FROM disk_wear WHERE site_id=?`,
 	} {
 		if _, err := tx.Exec(q, siteID); err != nil {
 			return err
@@ -412,6 +426,12 @@ func (s *SQLite) Maintain(now time.Time) error {
 	}
 	defer tx.Rollback()
 	if _, err := tx.Exec(`DELETE FROM samples WHERE at < ?`, cut365); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM disk_wear WHERE at < ?`, cut365); err != nil {
+		return err
+	}
+	if err := compactDiskWear(tx, cut30, cut90); err != nil {
 		return err
 	}
 	if err := s.compactUptime(tx, now); err != nil {

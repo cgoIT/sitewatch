@@ -3,6 +3,7 @@ package collect
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"strings"
 	"time"
 
@@ -64,6 +65,13 @@ func smartArgs(typ, name string) []string {
 // ParseSMART liest die JSON-Ausgabe von "smartctl -j -H -A". ok=false: kein SMART-Urteil enthalten.
 // smartctl setzt auch bei gesundem Gerät Exit-Bits, deshalb zählt nur der Inhalt.
 func ParseSMART(data string) (report.Disk, bool) {
+	d, ok, _ := parseSMART(data)
+	return d, ok
+}
+
+// parseSMART wie ParseSMART; badPct meldet, dass ein Prozentwert außerhalb 0..255 lag (die NVMe-Spezifikation kennt nur 8 Bit)
+// und deshalb unbekannt (nil) bleibt, damit nicht der ganze Report an der Validierung scheitert.
+func parseSMART(data string) (d report.Disk, ok, badPct bool) {
 	var doc struct {
 		Model  string `json:"model_name"`
 		Serial string `json:"serial_number"`
@@ -82,13 +90,16 @@ func ParseSMART(data string) (report.Disk, bool) {
 			} `json:"table"`
 		} `json:"ata_smart_attributes"`
 		NVMe *struct {
-			MediaErrors int64 `json:"media_errors"`
+			MediaErrors  int64  `json:"media_errors"`
+			PercentUsed  *int   `json:"percentage_used"`
+			AvailSpare   *int   `json:"available_spare"`
+			UnitsWritten *int64 `json:"data_units_written"`
 		} `json:"nvme_smart_health_information_log"`
 	}
 	if json.Unmarshal([]byte(data), &doc) != nil || doc.Status == nil || doc.Status.Passed == nil {
-		return report.Disk{}, false
+		return report.Disk{}, false, false
 	}
-	d := report.Disk{Model: doc.Model, Serial: strings.TrimSpace(doc.Serial), Passed: doc.Status.Passed}
+	d = report.Disk{Model: doc.Model, Serial: strings.TrimSpace(doc.Serial), Passed: doc.Status.Passed}
 	if doc.Temp != nil && doc.Temp.Current != nil && *doc.Temp.Current > 0 { // 0 °C heißt: nicht ermittelt
 		d.TempC = doc.Temp.Current
 	}
@@ -100,10 +111,22 @@ func ParseSMART(data string) (report.Disk, bool) {
 	}
 	if doc.NVMe != nil {
 		bad, have = doc.NVMe.MediaErrors, true
+		inRange := func(p *int) *int {
+			if p != nil && (*p < 0 || *p > 255) {
+				badPct = true
+				return nil
+			}
+			return p
+		}
+		d.WearPct, d.SpareLeftPct = inRange(doc.NVMe.PercentUsed), inRange(doc.NVMe.AvailSpare)
+		if u := doc.NVMe.UnitsWritten; u != nil && *u >= 0 && *u <= math.MaxInt64/512000 { // eine Einheit = 1000 Sektoren à 512 Byte
+			b := *u * 512000
+			d.WrittenBytes = &b
+		}
 	}
 	if have {
 		n := int(min(bad, 1<<30))
 		d.BadSectors = &n
 	}
-	return d, true
+	return d, true, badPct
 }

@@ -391,3 +391,61 @@ func TestDiskHealthSamples(t *testing.T) {
 		t.Errorf("Block: Maximum erwartet (9 Sektoren, 1 fehlend): %+v", b)
 	}
 }
+
+func TestDiskWear(t *testing.T) {
+	s := open(t)
+	t0 := time.Date(2026, 10, 1, 10, 0, 0, 0, time.UTC)
+	w, b := 90, int64(1000)
+	for i, wear := range []int{80, 90} { // zwei Punkte im selben 6-Stunden-Block, alt genug zum Verdichten
+		w = wear
+		e := entry("a", t0.Add(time.Duration(i)*time.Hour), 1, nil)
+		e.Report.Host.Disks = []report.Disk{{Device: "/dev/nvme0n1", Serial: "S1", WearPct: &w, WrittenBytes: &b}}
+		if err := s.Save(e, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.Maintain(t0.AddDate(0, 0, 40)); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.DiskWear("a")
+	if err != nil || len(got) != 1 || got[0].Key != "sn:S1" || len(got[0].Points) != 1 || *got[0].Points[0].WearPct != 90 || *got[0].Points[0].WrittenBytes != 1000 {
+		t.Fatalf("%v %+v", err, got)
+	}
+	if err := s.DeleteSite("a"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.DiskWear("a"); len(got) != 0 {
+		t.Error("Plattenverlauf von a noch da")
+	}
+}
+
+func TestDiskWearCompaction(t *testing.T) {
+	s := open(t)
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	i := func(n int) *int { return &n }
+	save := func(site, serial string, at time.Time, w *int, b *int64) {
+		e := entry(site, at, 0, nil)
+		e.Report.Host.Disks = []report.Disk{{Device: "/dev/n", Serial: serial, WearPct: w, WrittenBytes: b}}
+		if err := s.Save(e, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old := now.AddDate(0, 0, -200) // Tagesblock (älter als 90 Tage)
+	b := int64(7)
+	save("a", "S1", old, i(10), nil) // NULL-Mischung: Maximum je Spalte
+	save("a", "S1", old.Add(time.Hour), nil, &b)
+	save("a", "S2", old, i(50), nil)                    // andere Platte bleibt getrennt
+	save("b", "S1", old, i(70), nil)                    // andere Site bleibt getrennt
+	save("a", "S1", old.AddDate(0, 0, 1), i(11), nil)   // Einzelpunkt am nächsten Tag
+	save("a", "S1", now.AddDate(0, 0, -400), i(1), nil) // älter als 365 Tage: gelöscht
+	if err := s.Maintain(now); err != nil {
+		t.Fatal(err)
+	}
+	a, _ := s.DiskWear("a")
+	if len(a) != 2 || len(a[0].Points) != 2 || *a[0].Points[0].WearPct != 10 || *a[0].Points[0].WrittenBytes != 7 || *a[0].Points[1].WearPct != 11 || len(a[1].Points) != 1 || *a[1].Points[0].WearPct != 50 {
+		t.Errorf("a: %+v", a)
+	}
+	if bs, _ := s.DiskWear("b"); len(bs) != 1 || *bs[0].Points[0].WearPct != 70 {
+		t.Errorf("b: %+v", bs)
+	}
+}

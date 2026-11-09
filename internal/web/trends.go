@@ -292,3 +292,66 @@ func buildTrend(history []store.Sample, days int, now time.Time, isContao bool, 
 	}
 	return t
 }
+
+// diskCharts baut je NVMe-Platte zwei Kurven: Verschleiß und geschriebene Menge pro Tag.
+func diskCharts(series []store.DiskSeries, days int, now time.Time) []chart {
+	from := now.AddDate(0, 0, -days)
+	wear := metric{get: func(s store.Sample) (float64, bool) { return intVal(s.WearPct) }, format: func(v float64) string { return fmt.Sprintf("%.0f %%", v) }}
+	perDay := metric{get: func(s store.Sample) (float64, bool) {
+		if s.WrittenBytes == nil {
+			return 0, false
+		}
+		return float64(*s.WrittenBytes) / 1e9, true
+	}, format: func(v float64) string { return fmt.Sprintf("%.1f GB", v) }}
+	var out []chart
+	for _, sr := range series {
+		ws := make([]store.Sample, len(sr.Points))
+		for i, p := range sr.Points {
+			ws[i] = store.Sample{At: p.At, WearPct: p.WearPct}
+		}
+		wear.title = "Verschleiß (NVMe) " + sr.Device
+		if c := buildChart(wear, ws, from, now); !c.Empty {
+			out = append(out, c)
+		}
+		perDay.title = "Geschrieben pro Tag " + sr.Device
+		if c := buildChart(perDay, writtenPerDay(sr.Points, now), from, now); !c.Empty {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// writtenPerDay bildet die Differenz der Tageswerte (UTC-Tage, Maximum je Tag); der laufende Tag fehlt. Nur aufeinanderfolgende Tage zählen; springt der Zähler
+// zurück (Plattentausch), ist der Wert unbekannt (nil) und die Kurve wird dort unterbrochen.
+func writtenPerDay(pts []store.DiskPoint, now time.Time) []store.Sample {
+	type dayVal struct {
+		day int64
+		at  time.Time
+		b   int64
+	}
+	var days []dayVal
+	today := now.Unix() / 86400
+	for _, p := range pts {
+		if p.WrittenBytes == nil || p.At.Unix()/86400 >= today { // der laufende Tag ist nur ein Teilwert
+			continue
+		}
+		d := p.At.Unix() / 86400
+		if n := len(days); n > 0 && days[n-1].day == d {
+			days[n-1].b, days[n-1].at = max(days[n-1].b, *p.WrittenBytes), p.At
+			continue
+		}
+		days = append(days, dayVal{d, p.At, *p.WrittenBytes})
+	}
+	var out []store.Sample
+	for i := 1; i < len(days); i++ {
+		if days[i].day != days[i-1].day+1 {
+			continue
+		}
+		s := store.Sample{At: days[i].at}
+		if diff := days[i].b - days[i-1].b; diff >= 0 {
+			s.WrittenBytes = &diff
+		}
+		out = append(out, s)
+	}
+	return out
+}
