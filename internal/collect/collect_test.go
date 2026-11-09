@@ -292,3 +292,10 @@ func TestParseSMARTNVMeWear(t *testing.T) {
 		t.Errorf("ATA: %+v", d)
 	}
 }
+
+func TestParseSMARTWearOutOfRange(t *testing.T) {
+	d, ok, bad := parseSMART(`{"smart_status":{"passed":true},"nvme_smart_health_information_log":{"media_errors":0,"percentage_used":300,"available_spare":90}}`)
+	if !ok || !bad || d.WearPct != nil || d.SpareLeftPct == nil || *d.SpareLeftPct != 90 {
+		t.Errorf("ok=%v bad=%v %+v", ok, bad, d)
+	}
+}
