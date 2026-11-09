@@ -44,6 +44,9 @@ type Config struct {
 	BackupMax       time.Duration   // Warnung, wenn das letzte Backup älter ist
 	DiskWarn        int             // Warnung, wenn weniger als so viel Prozent Speicher frei sind
 	DiskCrit        int             // kritisch, wenn weniger als so viel Prozent frei sind
+	DiskWearWarn    int             // NVMe: Warnung ab so viel Prozent Verschleiß (percentage_used)
+	DiskWearCrit    int             // NVMe: kritisch ab so viel Prozent Verschleiß
+	DiskSpareWarn   int             // NVMe: Warnung, wenn weniger als so viel Prozent Reserve (available_spare) übrig sind
 	CronWarn        time.Duration   // Warnung, wenn der letzte Contao-Cron-Lauf länger her ist
 	CronCrit        time.Duration   // kritisch, wenn er noch länger her ist
 	RebootWarn      time.Duration   // Warnung, wenn ein Neustart des Servers (reboot-required) so lange aussteht
@@ -61,7 +64,7 @@ type Config struct {
 // DefaultConfig liefert die Standardwerte aller Schwellwerte. Im Betrieb kommen Abweichungen aus der Datenbank (Seite „Einstellungen“).
 func DefaultConfig() Config {
 	return Config{StaleAfter: 15 * time.Minute, BundleStaleAfter: 3 * time.Hour, BundlePingAfter: 90 * time.Minute, ErrorWarn: 10, EOLWarn: 90 * 24 * time.Hour,
-		TLSWarn: 14 * 24 * time.Hour, BackupMax: 36 * time.Hour, DiskWarn: 15, DiskCrit: 5, CronWarn: 2 * time.Hour, CronCrit: 4 * time.Hour, MaintWarn: 2 * time.Hour, RebootWarn: 7 * 24 * time.Hour, MaintCrit: 8 * time.Hour,
+		TLSWarn: 14 * 24 * time.Hour, BackupMax: 36 * time.Hour, DiskWarn: 15, DiskCrit: 5, DiskWearWarn: 80, DiskWearCrit: 100, DiskSpareWarn: 50, CronWarn: 2 * time.Hour, CronCrit: 4 * time.Hour, MaintWarn: 2 * time.Hour, RebootWarn: 7 * 24 * time.Hour, MaintCrit: 8 * time.Hour,
 		UptimeFails: 3, LatencyWarn: 2 * time.Second, UptimeWarnPct: 99, Retention: store.DefaultRetention()}
 }
 
@@ -149,6 +152,19 @@ func Evaluate(r *report.Report, receivedAt, now time.Time, cfg Config) Result {
 			default:
 				raise(Warn, "Platte %s: %d defekte/umgelagerte Sektoren", d.Device, *d.BadSectors)
 			}
+		}
+	}
+	for _, d := range r.Host.Disks { // Verschleiß ohne Kenntnisnahme: eine Platte jenseits 100 % soll sichtbar bleiben
+		if w := d.WearPct; w != nil {
+			switch {
+			case *w >= cfg.DiskWearCrit:
+				raise(Crit, "Platte %s: Verschleiß %d %%, Tausch einplanen", d.Device, *w)
+			case *w >= cfg.DiskWearWarn:
+				raise(Warn, "Platte %s: Verschleiß %d %%", d.Device, *w)
+			}
+		}
+		if s := d.SpareLeftPct; s != nil && *s < cfg.DiskSpareWarn {
+			raise(Warn, "Platte %s: nur noch %d %% Reserve (Available Spare)", d.Device, *s)
 		}
 	}
 	for _, a := range r.Host.Raids {

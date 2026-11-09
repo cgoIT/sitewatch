@@ -71,6 +71,8 @@ func TestWith(t *testing.T) {
 		"wartung":   {"maintenance_warn_minutes": 600},
 		"history":   {"history_full_days": 100},
 		">100":      {"disk_warn_pct": 101},
+		"wear":      {"disk_wear_warn_pct": 120},
+		"spare":     {"disk_spare_warn_pct": 101},
 	} {
 		if got, err := def.With(vals); err == nil || got != def {
 			t.Errorf("%s: kein Fehler oder Config verändert", name)
