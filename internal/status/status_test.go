@@ -139,3 +139,37 @@ func TestEvaluateDiskRaidEdgeCases(t *testing.T) {
 		t.Errorf("inaktiv: %v, erwartet Crit", got)
 	}
 }
+
+func TestEvaluateHostOS(t *testing.T) {
+	r := &report.Report{Site: report.Site{ID: "a", Kind: "host"}}
+	if got := Evaluate(r, now, now, DefaultConfig()).Level; got != OK {
+		t.Fatalf("nichts erfasst: %v", got)
+	}
+	r.Host.Updates = &report.OSUpdates{Manager: "apt", Total: 5}
+	if got := Evaluate(r, now, now, DefaultConfig()).Level; got != OK {
+		t.Errorf("normale Updates dürfen nicht warnen: %v", got)
+	}
+	r.Host.Updates.Security = 1
+	if got := Evaluate(r, now, now, DefaultConfig()).Level; got != Warn {
+		t.Errorf("Sicherheitsupdate: %v", got)
+	}
+	r.Host.Updates = nil
+	since := now.Add(-3 * 24 * time.Hour)
+	r.Host.OS = &report.OSInfo{RebootRequired: true, RebootSince: &since}
+	if got := Evaluate(r, now, now, DefaultConfig()).Level; got != OK {
+		t.Errorf("Neustart seit 3 Tagen: %v", got)
+	}
+	since = now.Add(-8 * 24 * time.Hour)
+	if got := Evaluate(r, now, now, DefaultConfig()).Level; got != Warn {
+		t.Errorf("Neustart seit 8 Tagen: %v", got)
+	}
+	r.Host.OS = nil
+	r.Host.Systemd = &report.Systemd{Failed: []string{}}
+	if got := Evaluate(r, now, now, DefaultConfig()).Level; got != OK {
+		t.Errorf("keine fehlgeschlagenen Units: %v", got)
+	}
+	r.Host.Systemd.Failed = []string{"mariadb.service"}
+	if res := Evaluate(r, now, now, DefaultConfig()); res.Level != Warn || len(res.Reasons) != 1 {
+		t.Errorf("failed unit: %+v", res)
+	}
+}
