@@ -58,13 +58,13 @@
       <dt>TLS läuft ab</dt><dd class="mono">{{if .R.Site.TLSExpires}}{{fmtDate .R.Site.TLSExpires}}{{else}}–{{end}}</dd>
     </dl></div></section>
     <section class="card"><h2>Netzwerk</h2><div class="pad">{{with .R.Host.Network}}<dl class="kv">
-      {{range .Interfaces}}<dt>{{.Name}}</dt><dd class="mono">{{range .Addrs}}{{.}}<br>{{end}}{{if .MAC}}<span class="muted">{{.MAC}}</span>{{end}}</dd>
+      {{range .Interfaces}}<dt>{{.Name}}</dt><dd class="mono" style="font-size:12px;overflow-wrap:anywhere">{{range .Addrs}}{{.}}<br>{{end}}{{if .MAC}}<span class="muted">{{.MAC}}</span>{{end}}</dd>
       {{end}}<dt>Standardroute</dt><dd class="mono">{{or .Gateway "–"}}</dd>
       <dt>DNS-Server</dt><dd class="mono">{{range .DNS}}{{.}}<br>{{else}}–{{end}}</dd>
     </dl>{{else}}<span class="muted">Nicht erfasst.</span>{{end}}</div></section>
     <section class="card"><h2>Speicher und Platten</h2><div class="pad"><dl class="kv">
       <dt>Speicherplatz frei</dt><dd class="mono">{{if .R.Host.DiskFreePct}}{{.R.Host.DiskFreePct}} %{{else}}–{{end}}</dd>
-      {{range .R.Host.Disks}}<dt>SMART {{.Device}}</dt><dd class="mono">{{if .Passed}}{{if .Failed}}FEHLER{{else}}OK{{end}}{{else}}–{{end}}{{if .Bad}}, {{.Bad}} defekte Sektoren{{end}}{{if .TempC}}, {{.TempC}} °C{{end}}</dd>
+      {{range .R.Host.Disks}}<dt>SMART {{.Device}}</dt><dd class="mono">{{if .Passed}}{{if .Failed}}FEHLER{{else}}OK{{end}}{{else}}–{{end}}{{if .Bad}}, {{.Bad}} defekte Sektoren{{end}}{{with .Temp}}, {{.}} °C{{end}}</dd>
       {{end}}{{range .R.Host.Raids}}<dt>RAID {{.Name}}</dt><dd class="mono">{{.Level}} {{.Active}}/{{.Total}}{{if .Inactive}}, inaktiv{{end}}{{if .Failed}}, {{.Failed}} defekt{{end}}{{if .Syncing}}, Abgleich läuft{{end}}</dd>
       {{end}}
     </dl></div></section>
@@ -75,7 +75,7 @@
       <dt>MariaDB</dt><dd class="mono">{{if .R.Host.MariaDB}}{{.R.Host.MariaDB}}{{else}}–{{end}}</dd>
       <dt>nginx</dt><dd class="mono">{{if .R.Host.Nginx}}{{.R.Host.Nginx}}{{else}}–{{end}}</dd>
       <dt>Speicherplatz frei</dt><dd class="mono">{{if .R.Host.DiskFreePct}}{{.R.Host.DiskFreePct}} %{{else}}–{{end}}</dd>
-      {{range .R.Host.Disks}}<dt>SMART {{.Device}}</dt><dd class="mono">{{if .Passed}}{{if .Failed}}FEHLER{{else}}OK{{end}}{{else}}–{{end}}{{if .Bad}}, {{.Bad}} defekte Sektoren{{end}}{{if .TempC}}, {{.TempC}} °C{{end}}</dd>
+      {{range .R.Host.Disks}}<dt>SMART {{.Device}}</dt><dd class="mono">{{if .Passed}}{{if .Failed}}FEHLER{{else}}OK{{end}}{{else}}–{{end}}{{if .Bad}}, {{.Bad}} defekte Sektoren{{end}}{{with .Temp}}, {{.}} °C{{end}}</dd>
       {{end}}{{range .R.Host.Raids}}<dt>RAID {{.Name}}</dt><dd class="mono">{{.Level}} {{.Active}}/{{.Total}}{{if .Inactive}}, inaktiv{{end}}{{if .Failed}}, {{.Failed}} defekt{{end}}{{if .Syncing}}, Abgleich läuft{{end}}</dd>
       {{end}}<dt>TLS läuft ab</dt><dd class="mono">{{if .R.Site.TLSExpires}}{{fmtDate .R.Site.TLSExpires}}{{else}}–{{end}}</dd>
       <dt>Letztes Backup</dt><dd class="mono">{{if .R.Site.LastBackup}}{{fmtTime .R.Site.LastBackup}}{{else}}–{{end}}</dd>

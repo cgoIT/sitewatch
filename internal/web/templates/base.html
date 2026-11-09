@@ -69,7 +69,11 @@ label.chk{display:inline-flex;gap:6px;align-items:center;font-size:13px;color:va
 .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 .btn.danger{color:#8F1C16}
 fieldset.site{border:1px solid var(--line);border-radius:8px;padding:12px 16px;margin:0 0 16px}
-fieldset.site legend{font-size:13px;font-weight:600;padding:0 6px}
+details.site{border:1px solid var(--line);border-radius:8px;padding:0 16px;margin:0 0 12px}
+details.site[open]{padding-bottom:12px}
+details.site>summary{cursor:pointer;font-size:14px;font-weight:600;padding:12px 0;list-style-position:inside}
+details.site[open]>summary{margin-bottom:8px}
+details.site>summary .muted{font-weight:400;font-size:13px}
 pre.code{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:12px 16px;overflow-x:auto;font:13px/1.5 "IBM Plex Mono",ui-monospace,monospace;margin:0}
 table.matrix{min-width:0}
 td.cell,table.matrix th:not(:first-child){text-align:center}
