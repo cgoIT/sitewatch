@@ -43,6 +43,32 @@
   </div></section>{{end}}
 <div class="grid2">
   <div class="col-a">
+    {{if eq .R.Site.Kind "host"}}
+    <section class="card"><h2>System</h2><div class="pad"><dl class="kv">
+      <dt>Betriebssystem</dt><dd class="mono">{{with .R.Host.OS}}{{or .Name "–"}}{{else}}–{{end}}</dd>
+      <dt>Kernel</dt><dd class="mono">{{with .R.Host.OS}}{{or .Kernel "–"}}{{else}}–{{end}}</dd>
+      <dt>Läuft seit</dt><dd class="mono">{{.HostView.Uptime}}</dd>
+      <dt>Neustart nötig</dt><dd class="mono">{{.HostView.Reboot}}</dd>
+      <dt>Last (1 Min.)</dt><dd class="mono">{{.HostView.Load}}</dd>
+      <dt>Arbeitsspeicher</dt><dd class="mono">{{.HostView.Mem}}</dd>
+      <dt>Swap</dt><dd class="mono">{{.HostView.Swap}}</dd>
+      <dt>MariaDB</dt><dd class="mono">{{if .R.Host.MariaDB}}{{.R.Host.MariaDB}}{{else}}–{{end}}</dd>
+      <dt>nginx</dt><dd class="mono">{{if .R.Host.Nginx}}{{.R.Host.Nginx}}{{else}}–{{end}}</dd>
+      <dt>Letztes Backup</dt><dd class="mono">{{if .R.Site.LastBackup}}{{fmtTime .R.Site.LastBackup}}{{else}}–{{end}}</dd>
+      <dt>TLS läuft ab</dt><dd class="mono">{{if .R.Site.TLSExpires}}{{fmtDate .R.Site.TLSExpires}}{{else}}–{{end}}</dd>
+    </dl></div></section>
+    <section class="card"><h2>Netzwerk</h2><div class="pad">{{with .R.Host.Network}}<dl class="kv">
+      {{range .Interfaces}}<dt>{{.Name}}</dt><dd class="mono">{{range .Addrs}}{{.}}<br>{{end}}{{if .MAC}}<span class="muted">{{.MAC}}</span>{{end}}</dd>
+      {{end}}<dt>Standardroute</dt><dd class="mono">{{or .Gateway "–"}}</dd>
+      <dt>DNS-Server</dt><dd class="mono">{{range .DNS}}{{.}}<br>{{else}}–{{end}}</dd>
+    </dl>{{else}}<span class="muted">Nicht erfasst.</span>{{end}}</div></section>
+    <section class="card"><h2>Speicher und Platten</h2><div class="pad"><dl class="kv">
+      <dt>Speicherplatz frei</dt><dd class="mono">{{if .R.Host.DiskFreePct}}{{.R.Host.DiskFreePct}} %{{else}}–{{end}}</dd>
+      {{range .R.Host.Disks}}<dt>SMART {{.Device}}</dt><dd class="mono">{{if .Passed}}{{if .Failed}}FEHLER{{else}}OK{{end}}{{else}}–{{end}}{{if .Bad}}, {{.Bad}} defekte Sektoren{{end}}{{if .TempC}}, {{.TempC}} °C{{end}}</dd>
+      {{end}}{{range .R.Host.Raids}}<dt>RAID {{.Name}}</dt><dd class="mono">{{.Level}} {{.Active}}/{{.Total}}{{if .Inactive}}, inaktiv{{end}}{{if .Failed}}, {{.Failed}} defekt{{end}}{{if .Syncing}}, Abgleich läuft{{end}}</dd>
+      {{end}}
+    </dl></div></section>
+    {{else}}
     <section class="card"><h2>Stack</h2><div class="pad"><dl class="kv">
       <dt>Contao</dt><dd class="mono">{{if .R.Site.Contao}}{{.R.Site.Contao}}{{else}}–{{end}}</dd>
       <dt>PHP</dt><dd class="mono">{{if .R.Site.PHP}}{{.R.Site.PHP}}{{else}}–{{end}}</dd>
@@ -59,6 +85,7 @@
       <dt>Wartungsmodus</dt><dd class="mono">{{.Maintenance}}</dd>
       <dt>Pakete insgesamt</dt><dd class="mono">{{.R.Site.PackagesTotal}}</dd>
     </dl></div></section>
+    {{end}}
     {{if .Trend.Changes}}<section class="card"><h2>Versionswechsel</h2><div class="pad"><dl class="kv">
       {{range .Trend.Changes}}<dt>{{fmtDate .At}} · {{.Product}}</dt><dd class="mono">{{.From}} → {{.To}}</dd>{{end}}
     </dl></div></section>{{end}}
@@ -69,6 +96,14 @@
       </tbody></table></div></section>
   </div>
   <div class="col-b">
+    {{if eq .R.Site.Kind "host"}}
+    <section class="card"><h2>Systemdienste</h2><div class="pad">{{with .R.Host.Systemd}}{{if .Failed}}<ul class="reasons" style="margin:0">{{range .Failed}}<li class="mono">{{.}}</li>{{end}}</ul><p class="muted" style="margin-bottom:0">Fehlgeschlagene Units; auf dem Server mit <span class="mono">systemctl --failed</span> prüfen.</p>{{else}}<span class="muted">Keine fehlgeschlagenen Units.</span>{{end}}{{else}}<span class="muted">Nicht erfasst (kein systemd).</span>{{end}}</div></section>
+    <section class="card"><h2>Betriebssystem-Updates <span class="muted" style="font-weight:400">{{with .R.Host.Updates}}· {{.Total}} offen, davon {{.Security}} Sicherheit{{end}}</span></h2>
+      <div class="scroll"><table><thead><tr><th>Paket</th><th>Installiert</th><th>Verfügbar</th><th>Hinweis</th></tr></thead><tbody>
+      {{with .R.Host.Updates}}{{range .Packages}}<tr><td class="mono" data-label="Paket">{{.Name}}</td><td class="mono" data-label="Installiert">{{.Installed}}</td><td class="mono" data-label="Verfügbar">{{.New}}</td><td data-label="Hinweis">{{if .Security}}<span class="badge warn">▲ Sicherheit</span>{{end}}</td></tr>
+      {{else}}<tr><td colspan="4" class="muted">Keine offenen Updates.</td></tr>{{end}}{{else}}<tr><td colspan="4" class="muted">Nicht erfasst (kein apt).</td></tr>{{end}}
+      </tbody></table></div></section>
+    {{else}}
     <section class="card"><h2>Pakete mit Updates <span class="muted" style="font-weight:400">· {{.OpenUpdates}} offen von {{.R.Site.PackagesTotal}}</span></h2>
       <div class="scroll"><table><thead><tr><th>Paket</th><th>Installiert</th><th>Verfügbar</th><th>Hinweis</th></tr></thead><tbody>
       {{range .Packages}}<tr><td class="mono" data-label="Paket">{{.Name}}</td><td class="mono" data-label="Installiert">{{.Installed}}</td><td class="mono" data-label="Verfügbar">{{.Latest}}</td>
@@ -84,6 +119,7 @@
       {{range .R.Errors}}<tr><td class="mono" data-label="Zeit">{{fmtTime .Time}}</td><td style="font-weight:500" data-label="Level">{{.Level}}</td><td class="mono msg" style="font-size:13px" data-label="Meldung">{{.Message}}</td><td class="mono" data-label="Anzahl">{{.Count}}×</td></tr>
       {{else}}<tr><td colspan="4" class="muted">Keine Fehler im Zeitfenster.</td></tr>{{end}}
       </tbody></table></div></section>
+    {{end}}
   </div>
 </div>
 {{if .ProbeLines}}<section class="card"><h2>Prüfungen von Sitewatch</h2><div class="pad"><ul class="reasons" style="margin:0">{{range .ProbeLines}}<li>{{.}}</li>{{end}}</ul></div></section>{{end}}
