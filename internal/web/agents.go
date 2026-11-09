@@ -110,6 +110,7 @@ func (s *Server) agentRoutes(ui *http.ServeMux) {
 	ui.HandleFunc("GET /agents/{id}", s.agentEdit)
 	ui.HandleFunc("POST /agents/{id}", s.agentSave)
 	ui.HandleFunc("POST /agents/{id}/rotate", s.agentRotate)
+	ui.HandleFunc("POST /agents/{id}/rename", s.agentRename)
 	ui.HandleFunc("POST /agents/{id}/delete", s.agentDelete)
 }
 
@@ -380,6 +381,26 @@ func (s *Server) agentRotate(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("agents: Token von %q erneuert", id)
 	s.showToken(w, r, id, tok)
+}
+
+func (s *Server) agentRename(w http.ResponseWriter, r *http.Request) {
+	id, newID := r.PathValue("id"), strings.TrimSpace(r.FormValue("new_id"))
+	if err := s.Agents.Rename(id, newID, s.Now()); err != nil {
+		if errors.Is(err, agents.ErrNotFound) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Redirect(w, r, "/agents/"+id+"?error="+url.QueryEscape(err.Error()), http.StatusSeeOther)
+		return
+	}
+	s.fetchMu.Lock()
+	if t, ok := s.fetched[id]; ok {
+		delete(s.fetched, id)
+		s.fetched[newID] = t
+	}
+	s.fetchMu.Unlock()
+	log.Printf("agents: %q umbenannt in %q", id, newID)
+	http.Redirect(w, r, "/agents/"+newID, http.StatusSeeOther)
 }
 
 func (s *Server) agentDelete(w http.ResponseWriter, r *http.Request) {

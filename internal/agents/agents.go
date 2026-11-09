@@ -334,6 +334,60 @@ func (s *Store) Save(id string, cfg agentcfg.Remote, now time.Time) error {
 	return s.save(as)
 }
 
+// Rename ändert die ID eines Agenten; Token und Konfiguration bleiben. Die Aufträge im Verlauf ziehen mit um.
+// Ein Contao-Bundle lässt sich nicht umbenennen (seine ID ist auch die Site-ID), ebenso nicht, solange Aufträge warten oder laufen
+// (ihre Signatur nennt die alte ID). Der Agent lehnt die Konfiguration ab, bis sein bootstrap.json die neue ID trägt.
+func (s *Store) Rename(oldID, newID string, now time.Time) error {
+	if !report.ValidID(newID) {
+		return errors.New("ungültige ID (erlaubt: a-z, 0-9, -)")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	as, err := s.load()
+	if err != nil {
+		return err
+	}
+	idx := -1
+	for i, a := range as {
+		switch a.ID {
+		case newID:
+			if newID != oldID {
+				return fmt.Errorf("Agent %q gibt es schon", newID)
+			}
+		case oldID:
+			idx = i
+		}
+	}
+	if idx < 0 {
+		return ErrNotFound
+	}
+	if as[idx].Bundle() {
+		return errors.New("ein Contao-Bundle lässt sich nicht umbenennen (die ID ist auch die Site-ID)")
+	}
+	if newID == oldID {
+		return nil
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var open int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM jobs WHERE agent=? AND status IN ('queued','running')`, oldID).Scan(&open); err != nil {
+		return err
+	}
+	if open > 0 {
+		return errors.New("es warten oder laufen noch Aufträge dieses Agenten; erst abwarten oder abbrechen")
+	}
+	if _, err := tx.Exec(`UPDATE agents SET id=?, updated=? WHERE id=?`, newID, now.UTC().Format(time.RFC3339Nano), oldID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE jobs SET agent=? WHERE agent=?`, newID, oldID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 // Rotate ersetzt das Token; das alte wird sofort ungültig.
 func (s *Store) Rotate(id string) (string, error) {
 	s.mu.Lock()

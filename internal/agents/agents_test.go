@@ -161,3 +161,48 @@ func TestImportMissingFileIsNoError(t *testing.T) {
 		t.Errorf("%d %v", n, err)
 	}
 }
+
+func TestRename(t *testing.T) {
+	s := open(t)
+	now := time.Now()
+	tok, _ := s.Create("alt", now)
+	if _, err := s.Create("andere", now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateBundle("bundle", "B", "https://b.example", now); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Rename("alt", "andere", now); err == nil {
+		t.Error("vorhandene ID muss abgelehnt werden")
+	}
+	if err := s.Rename("alt", "../x", now); err == nil {
+		t.Error("ungültige ID muss abgelehnt werden")
+	}
+	if err := s.Rename("bundle", "neu", now); err == nil {
+		t.Error("Bundle darf nicht umbenannt werden")
+	}
+	if err := s.Rename("gibtsnicht", "neu", now); err != ErrNotFound {
+		t.Errorf("unbekannt: %v", err)
+	}
+	if _, err := s.db.Exec(`INSERT INTO jobs(id, agent, site, action, status, approved_by, created_ns, expires_ns, envelope) VALUES('j1','alt','s','a','queued','x',1,2,'{}')`); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Rename("alt", "neu", now); err == nil {
+		t.Error("mit wartendem Auftrag darf nicht umbenannt werden")
+	}
+	if _, err := s.db.Exec(`UPDATE jobs SET status='done'`); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Rename("alt", "neu", now); err != nil {
+		t.Fatal(err)
+	}
+	a, ok, _ := s.ByToken(tok)
+	if !ok || a.ID != "neu" {
+		t.Errorf("Token muss weiter gelten, jetzt für %q", a.ID)
+	}
+	var n int
+	_ = s.db.QueryRow(`SELECT COUNT(*) FROM jobs WHERE agent='neu'`).Scan(&n)
+	if n != 1 {
+		t.Errorf("Auftrag zog nicht um: %d", n)
+	}
+}

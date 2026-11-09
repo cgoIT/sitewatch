@@ -400,3 +400,24 @@ func TestProbeLines(t *testing.T) {
 type fakeUp struct{}
 
 func (fakeUp) Check(string) (status.UptimeCheck, bool) { return status.UptimeCheck{}, false }
+
+func TestAgentRename(t *testing.T) {
+	srv, _ := setupAgents(t)
+	do(srv, "POST", "/agents", url.Values{"id": {"alt"}}, nil)
+	do(srv, "POST", "/agents", url.Values{"id": {"andere"}}, nil)
+	if w := do(srv, "POST", "/agents/alt/rename", url.Values{"new_id": {"andere"}}, nil); w.Code != 303 || !strings.Contains(w.Header().Get("Location"), "error=") {
+		t.Errorf("doppelte ID: %d %s", w.Code, w.Header().Get("Location"))
+	}
+	if w := do(srv, "POST", "/agents/alt/rename", url.Values{"new_id": {"neu"}}, nil); w.Code != 303 || w.Header().Get("Location") != "/agents/neu" {
+		t.Fatalf("Umbenennen: %d %s", w.Code, w.Header().Get("Location"))
+	}
+	if _, err := srv.Agents.Get("alt"); err == nil {
+		t.Error("alte ID besteht noch")
+	}
+	if w := do(srv, "GET", "/agents/neu", nil, nil); !strings.Contains(w.Body.String(), "Umbenennen") || !strings.Contains(w.Body.String(), `<details class="site" open>`) {
+		t.Error("Formular fehlt")
+	}
+	if w := do(srv, "POST", "/agents/gibtsnicht/rename", url.Values{"new_id": {"x"}}, nil); w.Code != 404 {
+		t.Errorf("unbekannter Agent: %d", w.Code)
+	}
+}
