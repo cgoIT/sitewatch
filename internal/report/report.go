@@ -170,6 +170,15 @@ type Package struct {
 
 // Failed meldet, ob SMART der Platte einen Fehler bescheinigt; Bad liefert die defekten Sektoren (0 = keine oder unbekannt).
 func (d Disk) Failed() bool { return d.Passed != nil && !*d.Passed }
+
+// Temp liefert die Temperatur in °C; 0 = unbekannt (auch ein 0 °C aus älteren Reports gilt so).
+func (d Disk) Temp() int {
+	if d.TempC == nil || *d.TempC < 0 {
+		return 0
+	}
+	return *d.TempC
+}
+
 func (d Disk) Bad() int {
 	if d.BadSectors == nil {
 		return 0

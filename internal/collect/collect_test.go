@@ -245,3 +245,15 @@ func TestSMARTProblems(t *testing.T) {
 		t.Errorf("ungültiges JSON muss ein Problem sein: %v", r.Site.Problems)
 	}
 }
+
+func TestParseSMARTTemperature(t *testing.T) {
+	for name, tc := range map[string]struct {
+		temp string
+		want int
+	}{"normal": {`"temperature":{"current":36}`, 36}, "null": {`"temperature":{"current":0}`, 0}, "ohne Wert": {`"temperature":{}`, 0}, "fehlt": {`"x":1`, 0}} {
+		d, ok := ParseSMART(`{"smart_status":{"passed":true},` + tc.temp + `}`)
+		if !ok || d.Temp() != tc.want || (tc.want == 0 && d.TempC != nil) {
+			t.Errorf("%s: %+v", name, d)
+		}
+	}
+}

@@ -63,7 +63,7 @@ func ParseSMART(data string) (report.Disk, bool) {
 			Passed *bool `json:"passed"`
 		} `json:"smart_status"`
 		Temp *struct {
-			Current int `json:"current"`
+			Current *int `json:"current"`
 		} `json:"temperature"`
 		ATA struct {
 			Table []struct {
@@ -81,8 +81,8 @@ func ParseSMART(data string) (report.Disk, bool) {
 		return report.Disk{}, false
 	}
 	d := report.Disk{Model: doc.Model, Passed: doc.Status.Passed}
-	if doc.Temp != nil {
-		d.TempC = &doc.Temp.Current
+	if doc.Temp != nil && doc.Temp.Current != nil && *doc.Temp.Current > 0 { // 0 °C heißt: nicht ermittelt
+		d.TempC = doc.Temp.Current
 	}
 	bad, have := int64(0), false
 	for _, a := range doc.ATA.Table {
