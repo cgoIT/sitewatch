@@ -97,7 +97,7 @@ func (s *Server) settingsReset(w http.ResponseWriter, r *http.Request) {
 	s.settingsMu.Lock()
 	defer s.settingsMu.Unlock()
 	cfg := status.DefaultConfig()
-	cfg.EOL, cfg.Uptime = s.cfg().EOL, s.cfg().Uptime // die Quellen (Support-Enden, Erreichbarkeit) sind keine Einstellung
+	cfg.EOL, cfg.Uptime, cfg.DiskAcks = s.cfg().EOL, s.cfg().Uptime, s.cfg().DiskAcks // die Quellen (Support-Enden, Erreichbarkeit, Kenntnisnahmen) sind keine Einstellung
 	if err := s.SaveSettings(cfg, nil); err != nil {
 		log.Printf("settings: zurücksetzen: %v", err)
 		http.Error(w, "interner Fehler", http.StatusInternalServerError)

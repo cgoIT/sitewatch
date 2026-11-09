@@ -150,6 +150,7 @@ func serve(args []string) {
 		cfg.EOL = ep
 		go ep.Run(context.Background(), 24*time.Hour)
 	}
+	cfg.DiskAcks = st
 	settings := status.NewSettings(cfg)
 	prober := &probe.Prober{Agents: ags, Store: st, Settings: settings, Now: time.Now, Uptime: st, Favicons: st}
 	go prober.Run(context.Background(), 5*time.Minute)
@@ -198,6 +199,7 @@ func serve(args []string) {
 	srv.Probe = prober
 	srv.Uptime = st
 	srv.Favicons = st
+	srv.DiskAcks = st
 	srv.SaveSettings = func(c status.Config, vals map[string]int) error {
 		if len(vals) == 0 {
 			if err := st.DeleteSetting(thresholdsKey); err != nil {

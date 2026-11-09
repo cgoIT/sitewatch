@@ -55,6 +55,8 @@ type Server struct {
 	// ("" = niemand); ohne Login (Protect == nil) gibt es keine Seiten für Aufträge, weil die Freigabe eine Person braucht.
 	Jobs store.Jobs
 	Who  func(*http.Request) string
+	// DiskAcks (optional) speichert die Kenntnisnahme defekter Sektoren; nil = kein Knopf.
+	DiskAcks store.DiskAcks
 	// Uptime (optional) liefert die Messwerte der Erreichbarkeitsprüfung; nil = keine Anzeige.
 	Uptime store.Uptime
 	// Favicons (optional) liefert die geholten Symbole der Sites (Route /sites/{id}/icon, Anzeige in der Übersicht); nil = keine.
@@ -101,6 +103,9 @@ func (s *Server) Handler() http.Handler {
 	ui.HandleFunc("POST /sites/{id}/delete", s.siteDelete)
 	if s.Uptime != nil {
 		ui.HandleFunc("POST /sites/{id}/uptime", s.uptimeSet)
+	}
+	if s.DiskAcks != nil {
+		ui.HandleFunc("POST /sites/{id}/disks", s.diskAck)
 	}
 	if s.Favicons != nil {
 		ui.HandleFunc("GET /sites/{id}/icon", s.siteIcon)
@@ -501,8 +506,8 @@ func (s *Server) detail(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.render(w, "detail.html", map[string]any{
-		"HostView": hostViewOf(rep.Host, s.Now()),
-		"R":        rep, "Status": rw, "Packages": open, "Ignored": ignored, "History": hist, "Trend": tr, "OpenUpdates": len(open),
+		"HostView": hostViewOf(rep.Host, s.Now()), "DiskAcks": s.diskAckViews(rep),
+		"R": rep, "Status": rw, "Packages": open, "Ignored": ignored, "History": hist, "Trend": tr, "OpenUpdates": len(open),
 		"Seen": status.Ago(s.Now().Sub(cur.ReceivedAt)),
 		"Day":  day, "DayLabel": dayLabel(day), "Days": dayOptions(days, day),
 		"Maintenance": maintenanceLabel(rep.Site.MaintenanceMode, rep.Site.MaintenanceSince),
@@ -510,6 +515,69 @@ func (s *Server) detail(w http.ResponseWriter, r *http.Request) {
 		"ProbeLines":  s.probeLines(id),
 		"Uptime":      s.detailUptime(id),
 	})
+}
+
+// diskAck nimmt die defekten Sektoren einer Platte zur Kenntnis (Basiswert = aktueller Report, nie ein Wert aus dem Formular)
+// oder hebt die Kenntnisnahme auf.
+func (s *Server) diskAck(w http.ResponseWriter, r *http.Request) {
+	id, key := r.PathValue("id"), r.FormValue("disk")
+	if !report.ValidID(id) || len(key) > 140 {
+		http.NotFound(w, r)
+		return
+	}
+	cur, ok, err := s.Store.Get(id)
+	if err != nil || !ok {
+		http.NotFound(w, r)
+		return
+	}
+	var disk *report.Disk
+	for i := range cur.Report.Host.Disks {
+		if cur.Report.Host.Disks[i].Key() == key {
+			disk = &cur.Report.Host.Disks[i]
+		}
+	}
+	switch {
+	case r.FormValue("action") == "clear":
+		err = s.DiskAcks.DeleteDiskAck(id, key) // auch für Platten, die nicht mehr gemeldet werden
+	case r.FormValue("action") != "ack":
+		http.Error(w, "ungültige Aktion", http.StatusBadRequest)
+		return
+	case disk != nil && disk.Bad() > 0:
+		err = s.DiskAcks.SetDiskAck(id, key, disk.Bad(), s.Now())
+	default:
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		log.Printf("diskack: %q: %v", id, err)
+		http.Error(w, "interner Fehler", http.StatusInternalServerError)
+		return
+	}
+	log.Printf("diskack: %q Platte %q: %q", id, key, r.FormValue("action"))
+	http.Redirect(w, r, "/sites/"+id, http.StatusSeeOther)
+}
+
+// diskAckView beschreibt die Kenntnisnahme einer Platte für die Detailseite.
+type diskAckView struct {
+	Acked  bool
+	Base   int
+	At     string
+	Worse  bool // seitdem gestiegen: erneut bestätigen
+	CanAck bool
+}
+
+func (s *Server) diskAckViews(rep report.Report) map[string]diskAckView {
+	out := map[string]diskAckView{}
+	for _, d := range rep.Host.Disks {
+		v := diskAckView{CanAck: s.DiskAcks != nil && d.Bad() > 0}
+		if s.DiskAcks != nil {
+			if base, at, ok := s.DiskAcks.DiskAck(rep.Site.ID, d.Key()); ok {
+				v.Acked, v.Base, v.At, v.Worse = true, base, at.Local().Format("02.01.2006"), d.Bad() > base
+			}
+		}
+		out[d.Key()] = v
+	}
+	return out
 }
 
 // hostView sind die aufbereiteten Betriebssystem-Werte eines Hosts für die Detailseite ("–" = nicht erfasst).

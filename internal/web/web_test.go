@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -410,5 +411,66 @@ func TestHostDetailShowsOSNetworkUpdates(t *testing.T) {
 	srv.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/", nil))
 	if !strings.Contains(w.Body.String(), "2 (1 Sicherheit)") {
 		t.Errorf("Übersicht zeigt die apt-Updates nicht")
+	}
+}
+
+func TestDiskAckFlow(t *testing.T) {
+	srv, tok, now := setup(t)
+	st := srv.Store.(*store.SQLite)
+	srv.DiskAcks = st
+	cfg := srv.Settings.Get()
+	cfg.DiskAcks = st
+	srv.Settings.Set(cfg)
+	bad, ok := 16, true
+	rep := report.Report{Schema: 1, CollectedAt: now, Site: report.Site{ID: "kunde-c", Name: "S", Kind: "host"},
+		Host: report.Host{Disks: []report.Disk{{Device: "/dev/sdd", Serial: "S1", Passed: &ok, BadSectors: &bad}}}}
+	if w := post(srv, tok, rep); w.Code != http.StatusNoContent {
+		t.Fatalf("Ingest: %d %s", w.Code, w.Body.String())
+	}
+	get := func() string {
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/sites/kunde-c", nil))
+		return w.Body.String()
+	}
+	if b := get(); !strings.Contains(b, "Zur Kenntnis nehmen") || !strings.Contains(b, "16 defekte/umgelagerte Sektoren") {
+		t.Fatalf("Knopf oder Warnung fehlt: %s", b)
+	}
+	do := func(form url.Values) int {
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/sites/kunde-c/disks", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		srv.Handler().ServeHTTP(w, req)
+		return w.Code
+	}
+	if c := do(url.Values{"disk": {"sn:S1"}, "action": {"boese"}}); c != http.StatusBadRequest {
+		t.Errorf("unbekannte Aktion: %d", c)
+	}
+	if c := do(url.Values{"disk": {"sn:FREMD"}, "action": {"ack"}}); c != http.StatusNotFound {
+		t.Errorf("unbekannte Platte: %d", c)
+	}
+	if c := do(url.Values{"disk": {"sn:S1"}, "action": {"ack"}}); c != http.StatusSeeOther {
+		t.Fatalf("ack: %d", c)
+	}
+	if b := get(); strings.Contains(b, "16 defekte/umgelagerte Sektoren") || !strings.Contains(b, "bekannt seit") {
+		t.Errorf("nach Kenntnisnahme darf es nicht mehr warnen")
+	}
+	bad = 19
+	if w := post(srv, tok, rep); w.Code != http.StatusNoContent {
+		t.Fatal(w.Code)
+	}
+	if b := get(); !strings.Contains(b, "gestiegen von 16 auf 19") {
+		t.Errorf("Anstieg muss warnen")
+	}
+	if w := httptest.NewRecorder(); true {
+		srv.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/sites/kunde-c?day=2026-10-27", nil))
+		if strings.Contains(w.Body.String(), "Zurücknehmen") {
+			t.Error("Tagesansicht darf keine Knöpfe zeigen")
+		}
+	}
+	if c := do(url.Values{"disk": {"sn:S1"}, "action": {"clear"}}); c != http.StatusSeeOther {
+		t.Fatalf("clear: %d", c)
+	}
+	if _, _, ok := st.DiskAck("kunde-c", "sn:S1"); ok {
+		t.Error("Kenntnisnahme besteht noch")
 	}
 }

@@ -136,6 +136,11 @@ Servermesswerte: Speicherplatz, nginx, MariaDB; erscheint als eigener Eintrag).
   `"smart": false` an der Site. Das RAID-Lesen bleibt aktiv und meldet nichts, wenn es keinen md-Verbund gibt.
 - Bewertung: SMART „failed“ und ein degradierter oder inaktiver RAID-Verbund sind kritisch, defekte Sektoren und ein als defekt
   markiertes RAID-Mitglied sind eine Warnung. Hardware-RAID-Controller, ZFS und btrfs sind nicht abgedeckt.
+- Eine Platte mit stabil gebliebenen defekten Sektoren lässt sich auf der Detailseite „zur Kenntnis nehmen“: Sitewatch merkt sich den
+  aktuellen Wert, der Host gilt dann wieder als OK und warnt erst, wenn der Wert steigt. „Zurücknehmen“ hebt das auf; SMART „failed“
+  bleibt immer kritisch. Die Platte wird über ihre Seriennummer erkannt (Ersatz: Gerätename), das Merken greift daher erst mit dem
+  Agent, der die Seriennummer meldet (bei der Umstellung warnt die Platte einmal neu). Die Kenntnisnahmen sind nicht Teil des
+  Konfigurationsexports; nach einem Umzug muss man sie neu setzen.
 
 **Updates ausschließen:** `"ignore_updates": ["contao/*:6.*", "vendor/paket"]` je Site. Eine Regel ist `paket-glob` (jedes Update)
 oder `paket-glob:versions-glob`. Treffer bleiben sichtbar („ausgeschlossen"), zählen aber nicht als offenes Update.
