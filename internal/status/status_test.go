@@ -173,3 +173,37 @@ func TestEvaluateHostOS(t *testing.T) {
 		t.Errorf("failed unit: %+v", res)
 	}
 }
+
+type fakeAcks map[string]int
+
+func (f fakeAcks) DiskAck(site, disk string) (int, time.Time, bool) {
+	v, ok := f[site+"|"+disk]
+	return v, now, ok
+}
+
+func TestEvaluateDiskAck(t *testing.T) {
+	tr, n := true, 16
+	r := &report.Report{Site: report.Site{ID: "a", Kind: "host"}, Host: report.Host{Disks: []report.Disk{{Device: "/dev/sdd", Serial: "S1", Passed: &tr, BadSectors: &n}}}}
+	cfg := DefaultConfig()
+	if got := Evaluate(r, now, now, cfg).Level; got != Warn {
+		t.Fatalf("ohne Kenntnisnahme: %v", got)
+	}
+	cfg.DiskAcks = fakeAcks{"a|sn:S1": 16}
+	if res := Evaluate(r, now, now, cfg); res.Level != OK || len(res.Reasons) != 0 {
+		t.Errorf("bekannt und unverändert muss OK sein: %+v", res)
+	}
+	n = 17
+	if res := Evaluate(r, now, now, cfg); res.Level != Warn || len(res.Reasons) != 1 {
+		t.Errorf("gestiegen muss warnen: %+v", res)
+	}
+	n = 10
+	if got := Evaluate(r, now, now, cfg).Level; got != OK {
+		t.Errorf("gesunken: %v", got)
+	}
+	n = 16
+	f := false
+	r.Host.Disks[0].Passed = &f
+	if got := Evaluate(r, now, now, cfg).Level; got != Crit {
+		t.Errorf("SMART failed bleibt auch bei Kenntnisnahme kritisch: %v", got)
+	}
+}

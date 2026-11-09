@@ -54,6 +54,7 @@ type Config struct {
 	LatencyWarn     time.Duration   // Warnung, wenn die Antwortzeit (Median der letzten Prüfungen) darüber liegt
 	UptimeWarnPct   int             // Anzeige: Erreichbarkeit der letzten 30 Tage darunter wird markiert (wirkt nicht auf den Status)
 	Uptime          UptimeSource    // optional: Erreichbarkeitsprüfung von Sitewatch aus; nil = keine
+	DiskAcks        DiskAckSource   // optional: zur Kenntnis genommene defekte Sektoren; nil = jede Platte mit defekten Sektoren warnt
 	EOL             EOLSource       // optional: aktuelle Support-Enden (z. B. endoflife.date); nil = nur die eingebaute PHP-Tabelle
 }
 
@@ -137,7 +138,17 @@ func Evaluate(r *report.Report, receivedAt, now time.Time, cfg Config) Result {
 		case d.Passed != nil && !*d.Passed:
 			raise(Crit, "Platte %s: SMART meldet Fehler, Ausfall droht", d.Device)
 		case d.BadSectors != nil && *d.BadSectors > 0:
-			raise(Warn, "Platte %s: %d defekte/umgelagerte Sektoren", d.Device, *d.BadSectors)
+			base, at, acked := 0, time.Time{}, false
+			if cfg.DiskAcks != nil {
+				base, at, acked = cfg.DiskAcks.DiskAck(r.Site.ID, d.Key())
+			}
+			switch {
+			case acked && *d.BadSectors <= base: // bekannt und nicht schlimmer geworden
+			case acked:
+				raise(Warn, "Platte %s: defekte Sektoren gestiegen von %d auf %d (zuletzt zur Kenntnis genommen am %s)", d.Device, base, *d.BadSectors, at.Format("02.01.2006"))
+			default:
+				raise(Warn, "Platte %s: %d defekte/umgelagerte Sektoren", d.Device, *d.BadSectors)
+			}
 		}
 	}
 	for _, a := range r.Host.Raids {
@@ -218,6 +229,11 @@ type UptimeCheck struct {
 // UptimeSource liefert den Stand der Prüfung; ok=false: die Site wird nicht geprüft oder es liegt noch nichts vor.
 type UptimeSource interface {
 	Check(siteID string) (UptimeCheck, bool)
+}
+
+// DiskAckSource liefert den Stand defekter Sektoren, bei dem eine Platte (report.Disk.Key) zur Kenntnis genommen wurde.
+type DiskAckSource interface {
+	DiskAck(siteID, disk string) (badSectors int, at time.Time, ok bool)
 }
 
 // EOLSource liefert das Ende der Sicherheitsunterstützung je Produkt ("php", "contao", "mariadb", "nginx") und Version.
