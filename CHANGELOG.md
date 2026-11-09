@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.7.0](https://github.com/cgoIT/sitewatch/compare/v1.6.0...v1.7.0) (2026-11-09)
+
+
+### Features
+
+* NVMe-Verschleiß und Schreibvolumen erfassen, bewerten und anzeigen ([b362cde](https://github.com/cgoIT/sitewatch/commit/b362cde1f60e91e697993ee42c08e9d23b909986))
+* **report:** NVMe-Verschleiß, Reserve und Schreibvolumen im Report (wear_pct, spare_pct, written_bytes) ([b1fa0ab](https://github.com/cgoIT/sitewatch/commit/b1fa0ab39cbd58547fae9c69e98dce8485842fde))
+* **status:** Bewertung von NVMe-Verschleiß und Reserve, Schwellen in den Einstellungen ([9b1fb84](https://github.com/cgoIT/sitewatch/commit/9b1fb84b0e75f414a76ab4ab6bf5dbcb73d99680))
+* **store:** Verlauf von Verschleiß und Schreibvolumen je Platte (disk_wear) ([2d3ca68](https://github.com/cgoIT/sitewatch/commit/2d3ca68b6e0a6e0a3be2f2f5ff2d509deb08b074))
+* **web:** Platten der Host-Detailseite als eigene Blöcke, laufender Tag fehlt bei Geschrieben pro Tag ([a9dcdf4](https://github.com/cgoIT/sitewatch/commit/a9dcdf4227782357c25992c0e006da63cd52e366))
+* **web:** Verschleiß und Schreibvolumen auf der Detailseite samt Kurven je Platte ([9d2bdf0](https://github.com/cgoIT/sitewatch/commit/9d2bdf0c928b1a8956da98920b68427fa2dda73e))
+
+
+### Bug Fixes
+
+* **collect:** NVMe-Prozentwerte außerhalb 0..255 verwerfen statt den Report abzulehnen ([c090538](https://github.com/cgoIT/sitewatch/commit/c09053863bb0fcd9a17234a08fc38abb44e50d10))
+
 ## [1.6.0](https://github.com/cgoIT/sitewatch/compare/v1.5.0...v1.6.0) (2026-11-09)
 
 
