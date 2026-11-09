@@ -39,6 +39,68 @@ type Host struct {
 	DiskFreePct *int   `json:"disk_free_pct,omitempty"`
 	Disks       []Disk `json:"disks,omitempty"` // SMART je Platte; leer = nicht erfasst
 	Raids       []Raid `json:"raids,omitempty"` // Linux-Software-RAID (mdadm); leer = keins oder nicht erfasst
+
+	// Nur Host-Einträge; nil = nicht erfasst (nie geraten).
+	OS      *OSInfo    `json:"os,omitempty"`
+	Network *Network   `json:"network,omitempty"`
+	Updates *OSUpdates `json:"os_updates,omitempty"`
+	Systemd *Systemd   `json:"systemd,omitempty"`
+}
+
+// OSInfo beschreibt Betriebssystem und Auslastung des Servers.
+type OSInfo struct {
+	Name           string     `json:"name,omitempty"`   // z. B. "Debian GNU/Linux 12 (bookworm)"
+	Kernel         string     `json:"kernel,omitempty"` // laufender Kernel
+	UptimeS        *int64     `json:"uptime_s,omitempty"`
+	RebootRequired bool       `json:"reboot_required,omitempty"`
+	RebootSince    *time.Time `json:"reboot_since,omitempty"` // seit wann ein Neustart aussteht
+	Load1          *float64   `json:"load1,omitempty"`
+	CPUs           int        `json:"cpus,omitempty"`
+	MemAvailPct    *int       `json:"mem_avail_pct,omitempty"`
+	SwapUsedPct    *int       `json:"swap_used_pct,omitempty"`
+}
+
+// Network sind die Netzwerkangaben des Servers.
+type Network struct {
+	Interfaces []Iface  `json:"interfaces,omitempty"`
+	Gateway    string   `json:"gateway,omitempty"` // Standardroute IPv4
+	DNS        []string `json:"dns,omitempty"`
+}
+
+// Iface ist eine aktive Netzwerkschnittstelle mit ihren Adressen (CIDR).
+type Iface struct {
+	Name  string   `json:"name"`
+	Addrs []string `json:"addrs"`
+	MAC   string   `json:"mac,omitempty"`
+}
+
+// OSUpdates sind offene Paket-Updates des Betriebssystems (apt).
+type OSUpdates struct {
+	Manager  string      `json:"manager"` // "apt"
+	Total    int         `json:"total"`   // alle offenen Updates (Packages ist ggf. gekürzt)
+	Security int         `json:"security"`
+	Packages []OSPackage `json:"packages,omitempty"`
+}
+
+// OSPackage ist ein Paket mit verfügbarem Update.
+type OSPackage struct {
+	Name      string `json:"name"`
+	Installed string `json:"installed,omitempty"`
+	New       string `json:"new"`
+	Security  bool   `json:"security,omitempty"`
+}
+
+// Systemd meldet fehlgeschlagene Units (systemctl --failed).
+type Systemd struct {
+	Failed []string `json:"failed"`
+}
+
+// OpenOSUpdates liefert die Zahl offener Betriebssystem-Updates (0 = keine oder nicht erfasst).
+func (h Host) OpenOSUpdates() int {
+	if h.Updates == nil {
+		return 0
+	}
+	return h.Updates.Total
 }
 
 // Raid ist ein Software-RAID-Verbund aus /proc/mdstat.
@@ -189,6 +251,9 @@ func (r *Report) Validate(now time.Time) error {
 			return errors.New("ungültige RAID-Angabe")
 		}
 	}
+	if err := r.Host.validateDetails(); err != nil {
+		return err
+	}
 	if len(r.Host.Disks) > 64 || len(r.Host.Raids) > 64 {
 		return errors.New("zu viele Platten oder RAID-Verbünde im Report")
 	}
@@ -205,3 +270,46 @@ func (r *Report) Validate(now time.Time) error {
 
 // badInt: negativ oder absurd groß (die Werte landen summiert im Verlauf).
 func badInt(p *int) bool { return p != nil && (*p < 0 || *p > 1<<30) }
+
+func (h Host) validateDetails() error {
+	long := func(ss ...string) bool {
+		for _, s := range ss {
+			if len(s) > 256 {
+				return true
+			}
+		}
+		return false
+	}
+	if o := h.OS; o != nil {
+		if (o.RebootSince != nil && o.RebootSince.After(time.Now().Add(5*time.Minute))) || long(o.Name, o.Kernel) || o.CPUs < 0 || o.CPUs > 1<<16 || (o.UptimeS != nil && *o.UptimeS < 0) ||
+			badInt(o.MemAvailPct) || badInt(o.SwapUsedPct) || (o.Load1 != nil && (*o.Load1 < 0 || *o.Load1 > 1e6)) {
+			return errors.New("ungültige OS-Angabe")
+		}
+	}
+	if n := h.Network; n != nil {
+		if len(n.Interfaces) > 64 || len(n.DNS) > 16 || long(n.Gateway) || long(n.DNS...) {
+			return errors.New("ungültige Netzwerkangabe")
+		}
+		for _, i := range n.Interfaces {
+			if len(i.Addrs) > 32 || long(i.Name, i.MAC) || long(i.Addrs...) {
+				return errors.New("ungültige Netzwerkangabe")
+			}
+		}
+	}
+	if u := h.Updates; u != nil {
+		if len(u.Packages) > 1000 || u.Total < 0 || u.Security < 0 || u.Total > 1<<20 || u.Security > u.Total || u.Security > 1<<20 || long(u.Manager) {
+			return errors.New("ungültige Update-Angabe")
+		}
+		for _, p := range u.Packages {
+			if long(p.Name, p.Installed, p.New) {
+				return errors.New("ungültige Update-Angabe")
+			}
+		}
+	}
+	if s := h.Systemd; s != nil {
+		if len(s.Failed) > 64 || long(s.Failed...) {
+			return errors.New("ungültige systemd-Angabe")
+		}
+	}
+	return nil
+}

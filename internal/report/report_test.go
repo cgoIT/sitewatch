@@ -79,3 +79,28 @@ func TestValidateDisksRaids(t *testing.T) {
 		t.Errorf("gültig: %v", err)
 	}
 }
+
+func TestValidateHostDetails(t *testing.T) {
+	now := time.Now()
+	mk := func(h Host) Report {
+		return Report{Schema: SchemaVersion, CollectedAt: now, Site: Site{ID: "a", Kind: "host"}, Host: h}
+	}
+	ok := mk(Host{Updates: &OSUpdates{Manager: "apt", Total: 3, Packages: []OSPackage{{Name: "curl", New: "1"}}}, Systemd: &Systemd{Failed: []string{"a.service"}},
+		Network: &Network{Interfaces: []Iface{{Name: "eth0", Addrs: []string{"10.0.0.2/24"}}}}, OS: &OSInfo{Name: "Debian"}})
+	if err := ok.Validate(now); err != nil {
+		t.Fatalf("gültiger Report abgelehnt: %v", err)
+	}
+	neg := int64(-1)
+	for name, h := range map[string]Host{
+		"uptime":    {OS: &OSInfo{UptimeS: &neg}},
+		"updates":   {Updates: &OSUpdates{Total: -1}},
+		"pakete":    {Updates: &OSUpdates{Packages: make([]OSPackage, 1001)}},
+		"units":     {Systemd: &Systemd{Failed: make([]string, 65)}},
+		"sec>total": {Updates: &OSUpdates{Total: 1, Security: 2}},
+		"lang":      {Network: &Network{Gateway: string(make([]byte, 300))}},
+	} {
+		if r := mk(h); r.Validate(now) == nil {
+			t.Errorf("%s: ungültiger Report angenommen", name)
+		}
+	}
+}
