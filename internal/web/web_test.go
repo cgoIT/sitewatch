@@ -507,7 +507,7 @@ func TestHostDetailShowsNVMeWear(t *testing.T) {
 	}
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/sites/kunde-c", nil))
-	for _, want := range []string{"Verschleiß 3 %", "geschrieben 2.0 TB", "Verschleiß 0 %"} {
+	for _, want := range []string{"<dt>Verschleiß</dt><dd class=\"mono\">3 %</dd>", "<dt>Geschrieben</dt><dd class=\"mono\">2.0 TB</dd>", "<dt>Verschleiß</dt><dd class=\"mono\">0 %</dd>", "/dev/nvme1n1"} {
 		if !strings.Contains(w.Body.String(), want) {
 			t.Errorf("%q fehlt", want)
 		}

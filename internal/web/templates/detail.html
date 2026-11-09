@@ -99,14 +99,24 @@
     </dl>{{else}}<span class="muted">Nicht erfasst.</span>{{end}}</div></section>
     <section class="card"><h2>Speicher und Platten</h2><div class="pad"><dl class="kv">
       <dt>Speicherplatz frei</dt><dd class="mono">{{if .R.Host.DiskFreePct}}{{.R.Host.DiskFreePct}} %{{else}}–{{end}}</dd>
-      {{range .R.Host.Disks}}{{$a := index $.DiskAcks .Key}}<dt>SMART {{.Device}}</dt><dd class="mono">{{if .Passed}}{{if .Failed}}FEHLER{{else}}OK{{end}}{{else}}–{{end}}{{if .Bad}}, {{.Bad}} defekte Sektoren{{end}}{{with .Temp}}, {{.}} °C{{end}}{{with .WearPct}}, Verschleiß {{.}} %{{end}}{{with .WrittenBytes}}, geschrieben {{fmtTB .}} TB{{end}}{{if .Model}}<div class="muted" style="font-size:12px">{{.Model}}{{if .Serial}} · {{.Serial}}{{end}}</div>{{end}}
-        {{if $a.Acked}}<div class="muted" style="font-size:12px">{{if $a.Worse}}▲ seit der Kenntnisnahme gestiegen (damals {{$a.Base}}, {{$a.At}}){{else}}bekannt seit {{$a.At}} ({{$a.Base}} Sektoren){{end}}</div>{{end}}
-        {{if and (not $.Day) (or $a.Acked $a.CanAck)}}<form method="post" action="/sites/{{$.R.Site.ID}}/disks" style="margin-top:4px"><input type="hidden" name="disk" value="{{.Key}}">
+      {{range .R.Host.Raids}}<dt>RAID {{.Name}}</dt><dd class="mono">{{.Level}} {{.Active}}/{{.Total}}{{if .Inactive}}, inaktiv{{end}}{{if .Failed}}, {{.Failed}} defekt{{end}}{{if .Syncing}}, Abgleich läuft{{end}}</dd>
+      {{end}}</dl>
+      {{range .R.Host.Disks}}{{$a := index $.DiskAcks .Key}}<div style="margin-top:14px;padding:12px 14px;border:1px solid var(--line);border-radius:6px">
+        <div style="font-weight:600">{{.Device}}</div>{{if .Model}}<div class="muted" style="font-size:12px;margin-bottom:8px">{{.Model}}{{if .Serial}} · {{.Serial}}{{end}}</div>{{end}}
+        <dl class="kv" style="margin-top:8px">
+          <dt>SMART</dt><dd class="mono">{{if .Passed}}{{if .Failed}}FEHLER{{else}}OK{{end}}{{else}}–{{end}}</dd>
+          {{if .BadSectors}}<dt>Defekte Sektoren</dt><dd class="mono">{{.Bad}}</dd>{{end}}
+          {{with .Temp}}<dt>Temperatur</dt><dd class="mono">{{.}} °C</dd>{{end}}
+          {{with .WearPct}}<dt>Verschleiß</dt><dd class="mono">{{.}} %</dd>{{end}}
+          {{with .SpareLeftPct}}<dt>Reserve</dt><dd class="mono">{{.}} %</dd>{{end}}
+          {{with .WrittenBytes}}<dt>Geschrieben</dt><dd class="mono">{{fmtTB .}} TB</dd>{{end}}
+        </dl>
+        {{if $a.Acked}}<div class="muted" style="font-size:12px;margin-top:8px">{{if $a.Worse}}▲ seit der Kenntnisnahme gestiegen (damals {{$a.Base}}, {{$a.At}}){{else}}bekannt seit {{$a.At}} ({{$a.Base}} Sektoren){{end}}</div>{{end}}
+        {{if and (not $.Day) (or $a.Acked $a.CanAck)}}<form method="post" action="/sites/{{$.R.Site.ID}}/disks" style="margin-top:8px"><input type="hidden" name="disk" value="{{.Key}}">
           {{if or (not $a.Acked) $a.Worse}}{{if $a.CanAck}}<button class="btn" name="action" value="ack" type="submit">Zur Kenntnis nehmen</button>{{end}}{{end}}
-          {{if $a.Acked}}<button class="btn" name="action" value="clear" type="submit">Zurücknehmen</button>{{end}}</form>{{end}}</dd>
-      {{end}}{{range .R.Host.Raids}}<dt>RAID {{.Name}}</dt><dd class="mono">{{.Level}} {{.Active}}/{{.Total}}{{if .Inactive}}, inaktiv{{end}}{{if .Failed}}, {{.Failed}} defekt{{end}}{{if .Syncing}}, Abgleich läuft{{end}}</dd>
-      {{end}}
-    </dl></div></section>
+          {{if $a.Acked}}<button class="btn" name="action" value="clear" type="submit">Zurücknehmen</button>{{end}}</form>{{end}}
+      </div>
+      {{end}}</div></section>
     {{else}}
     <section class="card"><h2>Pakete mit Updates <span class="muted" style="font-weight:400">· {{.OpenUpdates}} offen von {{.R.Site.PackagesTotal}}</span></h2>
       <div class="scroll"><table><thead><tr><th>Paket</th><th>Installiert</th><th>Verfügbar</th><th>Hinweis</th></tr></thead><tbody>

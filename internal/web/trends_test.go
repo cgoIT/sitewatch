@@ -158,9 +158,12 @@ func TestWrittenPerDay(t *testing.T) {
 	pts := []store.DiskPoint{{At: d0, WrittenBytes: b(100)}, {At: d0.Add(time.Hour), WrittenBytes: b(150)},
 		{At: d0.AddDate(0, 0, 1), WrittenBytes: b(400)}, {At: d0.AddDate(0, 0, 2), WrittenBytes: b(10)}, // Zähler zurück
 		{At: d0.AddDate(0, 0, 4), WrittenBytes: b(50)}} // Lücke von einem Tag: kein Wert
-	got := writtenPerDay(pts)
+	got := writtenPerDay(pts, d0.AddDate(0, 0, 4)) // der 5. Tag (Index 4) ist „heute“ und fehlt
 	if len(got) != 2 || *got[0].WrittenBytes != 250 || got[1].WrittenBytes != nil {
 		t.Errorf("%+v", got)
+	}
+	if got := writtenPerDay(pts, d0.AddDate(0, 0, 2)); len(got) != 1 { // „heute“ = dritter Tag: nur Tag 1 hat einen Vorgänger
+		t.Errorf("laufender Tag: %+v", got)
 	}
 }
 

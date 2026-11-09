@@ -314,24 +314,25 @@ func diskCharts(series []store.DiskSeries, days int, now time.Time) []chart {
 			out = append(out, c)
 		}
 		perDay.title = "Geschrieben pro Tag " + sr.Device
-		if c := buildChart(perDay, writtenPerDay(sr.Points), from, now); !c.Empty {
+		if c := buildChart(perDay, writtenPerDay(sr.Points, now), from, now); !c.Empty {
 			out = append(out, c)
 		}
 	}
 	return out
 }
 
-// writtenPerDay bildet die Differenz der Tageswerte (UTC-Tage, Maximum je Tag). Nur aufeinanderfolgende Tage zählen; springt der Zähler
+// writtenPerDay bildet die Differenz der Tageswerte (UTC-Tage, Maximum je Tag); der laufende Tag fehlt. Nur aufeinanderfolgende Tage zählen; springt der Zähler
 // zurück (Plattentausch), ist der Wert unbekannt (nil) und die Kurve wird dort unterbrochen.
-func writtenPerDay(pts []store.DiskPoint) []store.Sample {
+func writtenPerDay(pts []store.DiskPoint, now time.Time) []store.Sample {
 	type dayVal struct {
 		day int64
 		at  time.Time
 		b   int64
 	}
 	var days []dayVal
+	today := now.Unix() / 86400
 	for _, p := range pts {
-		if p.WrittenBytes == nil {
+		if p.WrittenBytes == nil || p.At.Unix()/86400 >= today { // der laufende Tag ist nur ein Teilwert
 			continue
 		}
 		d := p.At.Unix() / 86400
