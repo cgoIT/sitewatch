@@ -50,7 +50,7 @@ const baseVersion = 1
 
 // migrations: Eintrag i hebt die Datenbank von Version baseVersion+i auf baseVersion+i+1. Jeder läuft in einer eigenen Transaktion
 // zusammen mit dem Setzen der Version, ein Fehler lässt die Datenbank unverändert.
-var migrations = []func(tx *sql.Tx) error{migrateUptime, migratePush, migrateDiskHealth, migrateFavicon}
+var migrations = []func(tx *sql.Tx) error{migrateUptime, migratePush, migrateDiskHealth, migrateFavicon, migrateDiskAcks}
 
 // migrate bringt die Datenbank auf die aktuelle Version. Eine neuere Datenbank (Programm zurückgerollt) wird nicht angefasst.
 // Die Version wird je Schritt innerhalb der Transaktion gelesen: Starten zwei Prozesse gleichzeitig, führt nur einer eine Migration aus.
@@ -373,6 +373,7 @@ func (s *SQLite) DeleteSite(siteID string) error {
 		`DELETE FROM uptime_day WHERE site_id=?`,
 		`DELETE FROM uptime_site WHERE site_id=?`,
 		`DELETE FROM favicons WHERE site_id=?`,
+		`DELETE FROM disk_acks WHERE site_id=?`,
 	} {
 		if _, err := tx.Exec(q, siteID); err != nil {
 			return err
