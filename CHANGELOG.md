@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.4.0](https://github.com/cgoIT/sitewatch/compare/v1.3.0...v1.4.0) (2026-11-09)
+
+
+### Features
+
+* **collect:** OS-Info, Netzwerk, apt-Updates und failed units erfassen ([7d0534c](https://github.com/cgoIT/sitewatch/commit/7d0534c1a22aadc7a03150166433c51fed31a66c))
+* Host-Details (OS, Netzwerk, apt-Updates, systemd) ([e048248](https://github.com/cgoIT/sitewatch/commit/e04824864df94c1e9177671fce30af5939fef828))
+* **report:** OS-, Netzwerk-, Update- und systemd-Felder für Host-Reports ([84fa403](https://github.com/cgoIT/sitewatch/commit/84fa4030c2defa6aa305a078da6b4d6afa50beb2))
+* **status:** Bewertung von Sicherheitsupdates, Neustart und systemd-Units ([cea07a6](https://github.com/cgoIT/sitewatch/commit/cea07a611bc88a9a7483493c2add04fcdc1680cb))
+* **web:** Host-Detailseite und apt-Updates in der Übersicht ([65fad85](https://github.com/cgoIT/sitewatch/commit/65fad856c937d93bcdb87ca133d1e28c9171645a))
+
 ## [1.3.0](https://github.com/cgoIT/sitewatch/compare/v1.2.0...v1.3.0) (2026-11-08)
 
 
