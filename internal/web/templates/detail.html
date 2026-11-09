@@ -64,7 +64,7 @@
       <dt>MariaDB</dt><dd class="mono">{{if .R.Host.MariaDB}}{{.R.Host.MariaDB}}{{else}}–{{end}}</dd>
       <dt>nginx</dt><dd class="mono">{{if .R.Host.Nginx}}{{.R.Host.Nginx}}{{else}}–{{end}}</dd>
       <dt>Speicherplatz frei</dt><dd class="mono">{{if .R.Host.DiskFreePct}}{{.R.Host.DiskFreePct}} %{{else}}–{{end}}</dd>
-      {{range .R.Host.Disks}}<dt>SMART {{.Device}}</dt><dd class="mono">{{if .Passed}}{{if .Failed}}FEHLER{{else}}OK{{end}}{{else}}–{{end}}{{if .Bad}}, {{.Bad}} defekte Sektoren{{end}}{{with .Temp}}, {{.}} °C{{end}}</dd>
+      {{range .R.Host.Disks}}<dt>SMART {{.Device}}</dt><dd class="mono">{{if .Passed}}{{if .Failed}}FEHLER{{else}}OK{{end}}{{else}}–{{end}}{{if .Bad}}, {{.Bad}} defekte Sektoren{{end}}{{with .Temp}}, {{.}} °C{{end}}{{with .WearPct}}, Verschleiß {{.}} %{{end}}{{with .WrittenBytes}}, geschrieben {{fmtTB .}} TB{{end}}</dd>
       {{end}}{{range .R.Host.Raids}}<dt>RAID {{.Name}}</dt><dd class="mono">{{.Level}} {{.Active}}/{{.Total}}{{if .Inactive}}, inaktiv{{end}}{{if .Failed}}, {{.Failed}} defekt{{end}}{{if .Syncing}}, Abgleich läuft{{end}}</dd>
       {{end}}<dt>TLS läuft ab</dt><dd class="mono">{{if .R.Site.TLSExpires}}{{fmtDate .R.Site.TLSExpires}}{{else}}–{{end}}</dd>
       <dt>Letztes Backup</dt><dd class="mono">{{if .R.Site.LastBackup}}{{fmtTime .R.Site.LastBackup}}{{else}}–{{end}}</dd>
@@ -99,7 +99,7 @@
     </dl>{{else}}<span class="muted">Nicht erfasst.</span>{{end}}</div></section>
     <section class="card"><h2>Speicher und Platten</h2><div class="pad"><dl class="kv">
       <dt>Speicherplatz frei</dt><dd class="mono">{{if .R.Host.DiskFreePct}}{{.R.Host.DiskFreePct}} %{{else}}–{{end}}</dd>
-      {{range .R.Host.Disks}}{{$a := index $.DiskAcks .Key}}<dt>SMART {{.Device}}</dt><dd class="mono">{{if .Passed}}{{if .Failed}}FEHLER{{else}}OK{{end}}{{else}}–{{end}}{{if .Bad}}, {{.Bad}} defekte Sektoren{{end}}{{with .Temp}}, {{.}} °C{{end}}{{if .Model}}<div class="muted" style="font-size:12px">{{.Model}}{{if .Serial}} · {{.Serial}}{{end}}</div>{{end}}
+      {{range .R.Host.Disks}}{{$a := index $.DiskAcks .Key}}<dt>SMART {{.Device}}</dt><dd class="mono">{{if .Passed}}{{if .Failed}}FEHLER{{else}}OK{{end}}{{else}}–{{end}}{{if .Bad}}, {{.Bad}} defekte Sektoren{{end}}{{with .Temp}}, {{.}} °C{{end}}{{with .WearPct}}, Verschleiß {{.}} %{{end}}{{with .WrittenBytes}}, geschrieben {{fmtTB .}} TB{{end}}{{if .Model}}<div class="muted" style="font-size:12px">{{.Model}}{{if .Serial}} · {{.Serial}}{{end}}</div>{{end}}
         {{if $a.Acked}}<div class="muted" style="font-size:12px">{{if $a.Worse}}▲ seit der Kenntnisnahme gestiegen (damals {{$a.Base}}, {{$a.At}}){{else}}bekannt seit {{$a.At}} ({{$a.Base}} Sektoren){{end}}</div>{{end}}
         {{if and (not $.Day) (or $a.Acked $a.CanAck)}}<form method="post" action="/sites/{{$.R.Site.ID}}/disks" style="margin-top:4px"><input type="hidden" name="disk" value="{{.Key}}">
           {{if or (not $a.Acked) $a.Worse}}{{if $a.CanAck}}<button class="btn" name="action" value="ack" type="submit">Zur Kenntnis nehmen</button>{{end}}{{end}}

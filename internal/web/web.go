@@ -57,6 +57,8 @@ type Server struct {
 	Who  func(*http.Request) string
 	// DiskAcks (optional) speichert die Kenntnisnahme defekter Sektoren; nil = kein Knopf.
 	DiskAcks store.DiskAcks
+	// DiskWears (optional) liefert den Verlauf von NVMe-Verschleiß und Schreibvolumen je Platte; nil = keine Kurven.
+	DiskWears store.DiskWears
 	// Uptime (optional) liefert die Messwerte der Erreichbarkeitsprüfung; nil = keine Anzeige.
 	Uptime store.Uptime
 	// Favicons (optional) liefert die geholten Symbole der Sites (Route /sites/{id}/icon, Anzeige in der Übersicht); nil = keine.
@@ -87,6 +89,7 @@ func New(s store.Store, cfg status.Config) *Server {
 		"hasJobs":     func() bool { return srv.jobsUI() },
 		"kinds":       func() []string { return []string{"contao", "php", "host"} },
 		"div60":       func(n int) int { return n / 60 },
+		"fmtTB":       func(b int64) string { return fmt.Sprintf("%.1f", float64(b)/1e12) },
 		"fmtDate":     func(t time.Time) string { return t.Local().Format("02.01.2006") },
 		"fmtTime":     func(t time.Time) string { return t.Local().Format("02.01. 15:04") },
 	}).ParseFS(templateFS, "templates/*.html"))
@@ -480,6 +483,13 @@ func (s *Server) detail(w http.ResponseWriter, r *http.Request) {
 		log.Printf("detail: Verlauf: %v", err)
 	}
 	tr := buildTrend(hist, rangeDays(r), s.Now(), cur.Report.Site.Kind == "contao", s.cfg())
+	if s.DiskWears != nil {
+		series, err := s.DiskWears.DiskWear(id)
+		if err != nil {
+			log.Printf("detail: Plattenverlauf: %v", err)
+		}
+		tr.Charts = append(tr.Charts, diskCharts(series, tr.Days, s.Now())...)
+	}
 	hist = hist[:min(len(hist), 20)]
 	rep := cur.Report
 	evalAt := s.Now()

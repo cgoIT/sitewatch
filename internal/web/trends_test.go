@@ -151,3 +151,28 @@ func TestDetailShowsTrend(t *testing.T) {
 		}
 	}
 }
+
+func TestWrittenPerDay(t *testing.T) {
+	d0 := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
+	b := func(n int64) *int64 { return &n }
+	pts := []store.DiskPoint{{At: d0, WrittenBytes: b(100)}, {At: d0.Add(time.Hour), WrittenBytes: b(150)},
+		{At: d0.AddDate(0, 0, 1), WrittenBytes: b(400)}, {At: d0.AddDate(0, 0, 2), WrittenBytes: b(10)}, // Zähler zurück
+		{At: d0.AddDate(0, 0, 4), WrittenBytes: b(50)}} // Lücke von einem Tag: kein Wert
+	got := writtenPerDay(pts)
+	if len(got) != 2 || *got[0].WrittenBytes != 250 || got[1].WrittenBytes != nil {
+		t.Errorf("%+v", got)
+	}
+}
+
+func TestDiskCharts(t *testing.T) {
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	w1, w2 := 5, 6
+	b1, b2 := int64(1e9), int64(3e9)
+	sr := []store.DiskSeries{{Key: "sn:A", Device: "/dev/nvme0n1", Points: []store.DiskPoint{
+		{At: now.AddDate(0, 0, -2), WearPct: &w1, WrittenBytes: &b1}, {At: now.AddDate(0, 0, -1), WearPct: &w2, WrittenBytes: &b2}}},
+		{Key: "sn:B", Device: "/dev/nvme1n1", Points: []store.DiskPoint{{At: now.Add(-time.Hour)}}}} // ohne Werte: keine Kurven
+	got := diskCharts(sr, 7, now)
+	if len(got) != 2 || got[0].Title != "Verschleiß (NVMe) /dev/nvme0n1" || got[1].Title != "Geschrieben pro Tag /dev/nvme0n1" || got[1].Last != "2.0 GB" {
+		t.Errorf("%+v", got)
+	}
+}

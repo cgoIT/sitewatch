@@ -200,6 +200,7 @@ func serve(args []string) {
 	srv.Uptime = st
 	srv.Favicons = st
 	srv.DiskAcks = st
+	srv.DiskWears = st
 	srv.SaveSettings = func(c status.Config, vals map[string]int) error {
 		if len(vals) == 0 {
 			if err := st.DeleteSetting(thresholdsKey); err != nil {

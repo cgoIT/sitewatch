@@ -14,6 +14,7 @@ Was das Dashboard zeigt (je Site und für den Server):
 - SMART-Zustand der Platten (nur `host`-Einträge, über `smartctl` aus smartmontools; der Agent braucht Leserechte auf die Geräte, i. d. R. Root): Gesamturteil „failed“ ist kritisch, defekte/umgelagerte Sektoren sind eine Warnung. Fehlt `smartctl`, erscheint ein Problem („Teilweise keine Daten“); auf VMs ohne echte Platten schaltet man die Abfrage je Site ab (siehe „SMART und RAID“ unten)
 - Linux-Software-RAID (mdadm, aus `/proc/mdstat`, nur `host`-Einträge): ein degradierter oder inaktiver Verbund ist kritisch, ein als defekt markiertes Mitglied bei vollständigem Verbund eine Warnung. Hardware-RAID-Controller und ZFS/btrfs sind nicht abgedeckt (einzelne Platten hinter einem Controller nur, wenn `smartctl --scan` sie liefert)
 - Verlauf der defekten Sektoren und der fehlenden RAID-Platten als Kurven (bei verdichteten Punkten gilt das Maximum)
+- Verlauf von NVMe-Verschleiß und Schreibvolumen je Platte (Kurven „Verschleiß“ und „Geschrieben pro Tag“, Tabelle `disk_wear`; sinkt der Zähler, etwa nach einem Plattentausch, bleibt der Tag leer)
 - Verlauf und Trends (Kurven, Statusband, Tagesstände) und eine Bewertung OK / Warnung / Kritisch
 - Erreichbarkeit und Antwortzeit: Sitewatch ruft die https-Adresse jeder Site regelmäßig auf (Uptime in %, Verlauf je Tag, Latenz)
 - Favicon der Site vor dem Namen in der Übersicht (von Sitewatch geholt, siehe „Favicons“)
@@ -136,6 +137,10 @@ Servermesswerte: Speicherplatz, nginx, MariaDB; erscheint als eigener Eintrag).
   `"smart": false` an der Site. Das RAID-Lesen bleibt aktiv und meldet nichts, wenn es keinen md-Verbund gibt.
 - Bewertung: SMART „failed“ und ein degradierter oder inaktiver RAID-Verbund sind kritisch, defekte Sektoren und ein als defekt
   markiertes RAID-Mitglied sind eine Warnung. Hardware-RAID-Controller, ZFS und btrfs sind nicht abgedeckt.
+- NVMe-Verschleiß: Aus dem SMART-Log von NVMe-Platten übernimmt der Agent „Percentage Used“ (kann über 100 % liegen),
+  „Available Spare“ und das Schreibvolumen. Ab 80 % Verschleiß gibt es eine Warnung, ab 100 % ist die Platte kritisch („Tausch
+  einplanen“); unter 50 % Reserve warnt Sitewatch ebenfalls. Die Schwellen stehen unter „Einstellungen“. Das Schreibvolumen wird
+  nur angezeigt. Verschleiß lässt sich nicht zur Kenntnis nehmen, die Platte bleibt sichtbar. Bei ATA-Platten fehlen die Werte.
 - Eine Platte mit stabil gebliebenen defekten Sektoren lässt sich auf der Detailseite „zur Kenntnis nehmen“: Sitewatch merkt sich den
   aktuellen Wert, der Host gilt dann wieder als OK und warnt erst, wenn der Wert steigt. „Zurücknehmen“ hebt das auf; SMART „failed“
   bleibt immer kritisch. Die Platte wird über ihre Seriennummer erkannt (Ersatz: Gerätename), das Merken greift daher erst mit dem

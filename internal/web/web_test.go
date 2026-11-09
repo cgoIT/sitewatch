@@ -496,3 +496,20 @@ func TestHostDetailLayoutOrder(t *testing.T) {
 		last = i
 	}
 }
+
+func TestHostDetailShowsNVMeWear(t *testing.T) {
+	srv, tok, now := setup(t)
+	pass, wear, w0, b := true, 3, 0, int64(2e12)
+	rep := report.Report{Schema: 1, CollectedAt: now, Site: report.Site{ID: "kunde-c", Name: "S", Kind: "host"}, Host: report.Host{
+		Disks: []report.Disk{{Device: "/dev/nvme0n1", Passed: &pass, WearPct: &wear, WrittenBytes: &b}, {Device: "/dev/nvme1n1", Passed: &pass, WearPct: &w0}}}}
+	if w := post(srv, tok, rep); w.Code != http.StatusNoContent {
+		t.Fatalf("Ingest: %d %s", w.Code, w.Body.String())
+	}
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/sites/kunde-c", nil))
+	for _, want := range []string{"Verschleiß 3 %", "geschrieben 2.0 TB", "Verschleiß 0 %"} {
+		if !strings.Contains(w.Body.String(), want) {
+			t.Errorf("%q fehlt", want)
+		}
+	}
+}
