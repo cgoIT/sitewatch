@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.1](https://github.com/cgoIT/sitewatch/compare/v1.8.0...v1.8.1) (2026-11-10)
+
+
+### Bug Fixes
+
+* **web:** Fehlertabellen brechen lange Meldungen um und scrollen nicht mehr horizontal ([5d16373](https://github.com/cgoIT/sitewatch/commit/5d16373568e6644a2dc7330f7898a13a11f1a9a0))
+
 ## [1.8.0](https://github.com/cgoIT/sitewatch/compare/v1.7.0...v1.8.0) (2026-11-10)
 
 
