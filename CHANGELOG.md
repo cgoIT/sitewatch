@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.8.0](https://github.com/cgoIT/sitewatch/compare/v1.7.0...v1.8.0) (2026-11-10)
+
+
+### Features
+
+* Host-Aufträge (apt, Journal) und Auswertung der Stack-Logs ([6f39f5b](https://github.com/cgoIT/sitewatch/commit/6f39f5bc9cd477fe63a6155be5f8918d84ece371))
+* Host-Aufträge (apt, Journal), Auswertung der Stack-Logs, Warnung bei vielen 5xx ([a4664c2](https://github.com/cgoIT/sitewatch/commit/a4664c22c28f088819bd00ed5fd537595951f4b2))
+* Monitore per User-Agent aus den Zugriffen ausschließen, Warnung bei vielen 5xx ([4eb0d6f](https://github.com/cgoIT/sitewatch/commit/4eb0d6fb45b33299a81c398dd783d34a546a3acd))
+
+
+### Bug Fixes
+
+* 5xx-Anteil höchstens 100 %, Liste der User-Agents bei älterem Formular erhalten ([fd0755c](https://github.com/cgoIT/sitewatch/commit/fd0755cddacebb49b5cd91cee840958304266e09))
+
 ## [1.7.0](https://github.com/cgoIT/sitewatch/compare/v1.6.0...v1.7.0) (2026-11-09)
 
 
