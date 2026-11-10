@@ -43,6 +43,8 @@ var Fields = []Field{
 	durField("bundle_stale_after_minutes", gReports, "Keine Meldung seit (Contao-Bundle): kritisch", "Minuten", time.Minute, func(c *Config) *time.Duration { return &c.BundleStaleAfter }),
 	durField("bundle_ping_after_minutes", gReports, "Weckruf an die Seite (Contao-Bundle), wenn der Report älter ist als", "Minuten", time.Minute, func(c *Config) *time.Duration { return &c.BundlePingAfter }),
 	intField("error_warn", gReports, "Fehler in 24 Stunden: Warnung ab", "Fehler", func(c *Config) *int { return &c.ErrorWarn }),
+	intField("http_5xx_warn", gReports, "Antworten mit 5xx in 24 Stunden: Warnung ab", "Antworten", func(c *Config) *int { return &c.HTTP5xxWarn }),
+	intField("http_5xx_pct", gReports, "… und nur, wenn ihr Anteil an den Zugriffen mindestens beträgt", "%", func(c *Config) *int { return &c.HTTP5xxPct }),
 	durField("eol_warn_days", gVersion, "Support-Ende: Warnung, wenn näher als", "Tage", 24*time.Hour, func(c *Config) *time.Duration { return &c.EOLWarn }),
 	durField("tls_warn_days", gVersion, "TLS-Zertifikat: Warnung, wenn es früher abläuft als", "Tage", 24*time.Hour, func(c *Config) *time.Duration { return &c.TLSWarn }),
 	durField("backup_max_hours", gBackup, "Letztes Backup: Warnung, wenn älter als", "Stunden", time.Hour, func(c *Config) *time.Duration { return &c.BackupMax }),
@@ -127,6 +129,8 @@ func (c Config) with(vals map[string]int) (Config, error) {
 		}
 	}
 	switch r := c.Retention; {
+	case c.HTTP5xxPct > 100:
+		return c, fmt.Errorf("Antworten mit 5xx: der Anteil darf höchstens 100 %% betragen")
 	case c.DiskWarn > 100 || c.DiskCrit > c.DiskWarn:
 		return c, fmt.Errorf("Freier Speicher: kritisch darf nicht über der Warnung liegen, die Warnung höchstens 100 %%")
 	case c.DiskWearWarn > c.DiskWearCrit || c.DiskSpareWarn > 100:

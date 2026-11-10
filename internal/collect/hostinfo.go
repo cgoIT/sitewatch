@@ -2,6 +2,7 @@ package collect
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"os"
 	"os/exec"
@@ -44,6 +45,7 @@ func collectHostInfo(ctx context.Context, cfg Config, r *report.Report, now time
 		} else {
 			r.Host.Systemd = &report.Systemd{Failed: ParseFailedUnits(out)}
 		}
+		collectJournal(ctx, cfg, r, now, problem)
 	}
 }
 
@@ -227,4 +229,34 @@ func ParseFailedUnits(data string) []string {
 		}
 	}
 	return out
+}
+
+// sshMaxLines begrenzt die Ausgabe von journalctl (runEnv puffert sie ganz); mehr Fehlversuche am Tag zählt Sitewatch nicht.
+const sshMaxLines = "100000"
+
+// collectJournal liest Kernel-Fehler und zählt fehlgeschlagene SSH-Anmeldungen im Zeitfenster.
+func collectJournal(ctx context.Context, cfg Config, r *report.Report, now time.Time, problem func(string, ...any)) {
+	if _, err := exec.LookPath("journalctl"); err != nil {
+		return
+	}
+	since := fmt.Sprintf("--since=-%ds", int(cfg.Window.Seconds()))
+	if out, se, code, err := runEnv(ctx, nil, cfg.Path, "journalctl", "-k", "-p", "err", since, "-o", "short-iso", "--no-pager", "-q"); err != nil || code != 0 {
+		problem("Kernel-Meldungen nicht lesbar: %s", firstLine(se))
+	} else {
+		r.Errors = ParseKernelLog(out, now, cfg.Window, cfg.MaxErrors)
+	}
+	// -t: Kennung der Meldung, unabhängig vom Namen der Unit (ssh/sshd); seit OpenSSH 9.8 schreibt sshd-session.
+	// Ohne Treffer endet journalctl --grep mit Code 1 und leerer Ausgabe: das sind null Fehlversuche.
+	out, se, code, err := runEnv(ctx, nil, cfg.Path, "journalctl", "-t", "sshd", "-t", "sshd-session", since, "-g", sshFailRe, "-n", sshMaxLines, "-o", "cat", "--no-pager", "-q")
+	if err != nil || code > 1 || (code == 1 && strings.TrimSpace(se) != "") {
+		problem("SSH-Anmeldungen nicht lesbar: %s", firstLine(se))
+		return
+	}
+	n := 0
+	for _, line := range strings.Split(out, "\n") {
+		if strings.TrimSpace(line) != "" {
+			n++
+		}
+	}
+	r.Host.SSHFailed = &n
 }

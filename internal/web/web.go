@@ -89,6 +89,7 @@ func New(s store.Store, cfg status.Config) *Server {
 		"hasJobs":     func() bool { return srv.jobsUI() },
 		"kinds":       func() []string { return []string{"contao", "php", "host"} },
 		"div60":       func(n int) int { return n / 60 },
+		"has":         func(list []string, s string) bool { return slices.Contains(list, s) },
 		"fmtTB":       func(b int64) string { return fmt.Sprintf("%.1f", float64(b)/1e12) },
 		"fmtDate":     func(t time.Time) string { return t.Local().Format("02.01.2006") },
 		"fmtTime":     func(t time.Time) string { return t.Local().Format("02.01. 15:04") },
@@ -515,7 +516,14 @@ func (s *Server) detail(w http.ResponseWriter, r *http.Request) {
 			open = append(open, d)
 		}
 	}
+	var offer siteChoice // Aufträge direkt aus den Listen; leer = nichts anbieten (kein Login, Tagesstand, Bundle)
+	if s.jobsUI() && day == "" {
+		if offer, _, err = s.siteChoice(id); err != nil {
+			log.Printf("detail: Aufträge: %v", err)
+		}
+	}
 	s.render(w, "detail.html", map[string]any{
+		"Offer":    offer,
 		"HostView": hostViewOf(rep.Host, s.Now()), "DiskAcks": s.diskAckViews(rep),
 		"R": rep, "Status": rw, "Packages": open, "Ignored": ignored, "History": hist, "Trend": tr, "OpenUpdates": len(open),
 		"Seen": status.Ago(s.Now().Sub(cur.ReceivedAt)),

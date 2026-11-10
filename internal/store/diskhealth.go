@@ -2,8 +2,13 @@ package store
 
 import "database/sql"
 
-func migrateDiskHealth(tx *sql.Tx) error {
-	for _, col := range []string{"bad_sectors", "raid_missing"} { // idempotent, wie die übrigen Migrationen
+func migrateDiskHealth(tx *sql.Tx) error { return addSampleCols(tx, "bad_sectors", "raid_missing") }
+
+// migrateTraffic: Zugriffe und 5xx-Antworten der letzten 24 Stunden je Verlaufspunkt.
+func migrateTraffic(tx *sql.Tx) error { return addSampleCols(tx, "requests", "http_5xx") }
+
+func addSampleCols(tx *sql.Tx, cols ...string) error {
+	for _, col := range cols { // idempotent, wie die übrigen Migrationen
 		var n int
 		if err := tx.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('samples') WHERE name=?`, col).Scan(&n); err != nil {
 			return err

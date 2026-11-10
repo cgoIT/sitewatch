@@ -11,6 +11,7 @@
 <input type="hidden" name="count" value="{{.Count}}">
 <section class="card"><h2>Allgemein</h2><div class="pad"><div class="fgrid">
   <label class="f">Intervall (z. B. 5m, mindestens 30s; leer = 5m)<input name="interval" value="{{.Interval}}"></label>
+  <label class="f">User-Agents, die nicht als Zugriff zählen (eigene Monitore; ein Teilstring je Zeile, z. B. Kuma)<textarea name="ignore_ua" rows="2">{{.IgnoreUA}}</textarea></label>
 </div></div></section>
 <section class="card"><h2>Sites</h2><div class="pad">
 {{range .Sites}}<details class="site"{{if or (not .ID) $.Error}} open{{end}}><summary>{{if .ID}}{{.ID}}{{if .Name}} · {{.Name}}{{end}} <span class="muted">{{.Kind}}{{if .URL}} · {{.URL}}{{end}}</span>{{else}}Neue Site (leer lassen = keine){{end}}</summary>

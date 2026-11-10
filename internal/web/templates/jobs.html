@@ -8,12 +8,12 @@
 <div class="scroll"><table>
   <thead><tr><th>Site</th><th>Anzeigen (ein Klick)</th><th>Ändern (mit Bestätigung)</th><th>Mit Site-ID bestätigen</th></tr></thead>
   <tbody>{{range .Sites}}{{$site := .ID}}<tr><td>{{.ID}}<div class="sub">{{.Agent}} · {{.Kind}}</div></td>
-    <td data-label="Anzeigen">{{range .Read}}<form method="post" action="/jobs" style="display:inline"><input type="hidden" name="site" value="{{$site}}"><input type="hidden" name="action" value="{{.Name}}"><button class="btn" type="submit" style="margin:0 6px 6px 0">{{.Label}}</button></form>{{end}}</td>
+    <td data-label="Anzeigen">{{range .Read}}<form method="post" action="/jobs" style="display:inline"><input type="hidden" name="site" value="{{$site}}"><input type="hidden" name="action" value="{{.Name}}"><button class="btn" type="submit" style="margin:0 6px 6px 0">{{.Label}}</button></form>{{end}}{{$units := .Units}}{{range .PerUnit}}{{$a := .}}{{range $units}}<form method="post" action="/jobs" style="display:inline"><input type="hidden" name="site" value="{{$site}}"><input type="hidden" name="action" value="{{$a.Name}}"><input type="hidden" name="arg" value="{{.}}"><button class="btn" type="submit" style="margin:0 6px 6px 0">{{$a.Label}} {{.}}</button></form>{{end}}{{end}}</td>
     <td data-label="Ändern">{{range .Change}}<a class="btn" style="text-decoration:none;display:inline-block;margin:0 6px 6px 0" href="/jobs/new?site={{$site}}&amp;action={{.Name}}">{{.Label}}</a>{{end}}</td>
     <td data-label="Bestätigen">{{range .Critical}}<a class="btn danger" style="text-decoration:none;display:inline-block;margin:0 6px 6px 0" href="/jobs/new?site={{$site}}&amp;action={{.Name}}">{{.Label}}</a>{{end}}{{if not .Any}}<span class="muted">keine angeboten (Agent nicht erreichbar, Auftragskanal aus oder für die Site nichts freigegeben)</span>{{end}}</td></tr>{{end}}</tbody>
 </table></div>
 <p class="muted" style="margin:12px 0 0">Angeboten wird, was der Agent selbst als erlaubt meldet (<code>actions</code> in seiner lokalen <code>bootstrap.json</code>) <em>und</em> was auf der Agentenseite für die Site freigegeben ist. Danach folgt eine Bestätigung.</p>
-{{else}}<p class="muted" style="margin:0">Keine Site eines Agenten vorhanden (Art contao oder php). Sites trägst du unter „Agenten“ ein.</p>{{end}}
+{{else}}<p class="muted" style="margin:0">Keine Site eines Agenten vorhanden (Art contao, php oder host). Sites trägst du unter „Agenten“ ein.</p>{{end}}
 </div></section>
 <section class="card"><h2>Zuletzt</h2>
 <div class="scroll"><table>

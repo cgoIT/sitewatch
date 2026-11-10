@@ -154,3 +154,12 @@ func TestWithJSON(t *testing.T) {
 		}
 	}
 }
+
+func TestHTTP5xxPctLimit(t *testing.T) {
+	if _, err := DefaultConfig().With(map[string]int{"http_5xx_pct": 101}); err == nil {
+		t.Error("ein Anteil über 100 % würde die Warnung still abschalten und muss abgelehnt werden")
+	}
+	if c, err := DefaultConfig().With(map[string]int{"http_5xx_warn": 5, "http_5xx_pct": 100}); err != nil || c.HTTP5xxWarn != 5 {
+		t.Errorf("%+v %v", c, err)
+	}
+}

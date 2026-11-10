@@ -10,5 +10,5 @@
   "nginx": "/usr/share/sitewatch-agent/docker/nginx-in-docker",
   "mariadb": "/usr/share/sitewatch-agent/docker/mariadb-in-docker",
   "smartctl": "/usr/sbin/smartctl",
-  "actions": ["site-status", "site-doctor", "site-validate-config", "contao-snapshot-list", "db-list", "contao-cache-refresh", "contao-filesync", "contao-snapshot", "db-snapshot", "site-restart", "maintenance-off", "maintenance-on", "contao-update"]
+  "actions": ["site-status", "site-doctor", "site-validate-config", "contao-snapshot-list", "db-list", "contao-cache-refresh", "contao-filesync", "contao-snapshot", "db-snapshot", "site-restart", "maintenance-off", "maintenance-on", "contao-update", "apt-update", "apt-upgrade", "journal-unit"]
 }

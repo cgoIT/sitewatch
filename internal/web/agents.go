@@ -243,7 +243,7 @@ func (s *Server) toForm(i int, st agentcfg.Site, agent string) siteForm {
 	f := siteForm{N: i, ID: st.ID, Name: st.Name, Kind: st.Kind, URL: st.URL, Path: st.Path, BackupDir: st.BackupDir,
 		BackupGlob: st.BackupGlob, SiteDir: st.Env["SITE_DIR"], Ignore: strings.Join(st.IgnoreUpdates, "\n"), Host: st.Host,
 		NoNginx: st.Nginx != nil && !*st.Nginx, NoMariaDB: st.MariaDB != nil && !*st.MariaDB, NoSMART: st.SMART != nil && !*st.SMART}
-	if s.jobsUI() && st.Kind != "host" {
+	if s.jobsUI() {
 		ann, _ := s.announced(agent)
 		for _, act := range jobs.Actions {
 			if act.AllowsKind(st.Kind) {
@@ -268,7 +268,7 @@ func (s *Server) editPage(w http.ResponseWriter, a agents.Agent, cfg agentcfg.Re
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(code)
 	preview, _ := json.MarshalIndent(a.Config, "", "  ") // der gespeicherte Stand, nicht die ungespeicherten Eingaben
-	s.render(w, "agent.html", map[string]any{"Preview": string(preview), "TTLDays": int(sign.TTL.Hours() / 24), "Now": s.Now(), "Expires": s.Now().Add(sign.TTL), "Agent": a, "Interval": cfg.Interval, "Sites": forms, "Count": len(forms),
+	s.render(w, "agent.html", map[string]any{"Preview": string(preview), "TTLDays": int(sign.TTL.Hours() / 24), "Now": s.Now(), "Expires": s.Now().Add(sign.TTL), "Agent": a, "Interval": cfg.Interval, "IgnoreUA": strings.Join(cfg.IgnoreUserAgents, "\n"), "Sites": forms, "Count": len(forms),
 		"Error": msg, "Fetched": s.fetchedText(a.ID), "Channel": s.channelText(a.ID), "Nonce": nonce})
 }
 
@@ -298,6 +298,11 @@ const maxSiteRows = 50
 // parseSites liest die Zeilen s<n>_… des Formulars; Zeilen mit „löschen“ oder ganz ohne ID fallen weg.
 func parseSites(r *http.Request) agentcfg.Remote {
 	cfg := agentcfg.Remote{Interval: strings.TrimSpace(r.FormValue("interval"))}
+	for _, l := range strings.Split(r.FormValue("ignore_ua"), "\n") {
+		if l = strings.TrimSpace(l); l != "" {
+			cfg.IgnoreUserAgents = append(cfg.IgnoreUserAgents, l)
+		}
+	}
 	n, _ := strconv.Atoi(r.FormValue("count"))
 	for i := 0; i < min(n, maxSiteRows); i++ {
 		f := func(k string) string { return strings.TrimSpace(r.FormValue(fmt.Sprintf("s%d_%s", i, k))) }
@@ -356,6 +361,9 @@ func (s *Server) agentSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cfg := parseSites(r)
+	if _, ok := r.PostForm["ignore_ua"]; !ok { // Formular ohne das Feld (vor dem Update geöffnet): die Liste nicht leeren
+		cfg.IgnoreUserAgents = a.Config.IgnoreUserAgents
+	}
 	if !s.jobsUI() { // ohne Aufträge zeigt das Formular keine Auswahl: nichts überschreiben
 		for i := range cfg.Sites {
 			for _, old := range a.Config.Sites {

@@ -513,3 +513,41 @@ func TestHostDetailShowsNVMeWear(t *testing.T) {
 		}
 	}
 }
+
+func TestDetailShowsTrafficAndHostJournal(t *testing.T) {
+	srv, tok, now := setup(t)
+	rep := report.Report{Schema: 1, CollectedAt: now, Site: report.Site{ID: "kunde-c", Name: "Kunde C", Kind: "contao", Traffic: &report.Traffic{Requests: 18667, Status4xx: 1884}},
+		Errors: []report.LogError{{Time: now, Level: "nginx error", Message: "upstream timed out", Count: 2}}}
+	if w := post(srv, tok, rep); w.Code != http.StatusNoContent {
+		t.Fatalf("Ingest: %d %s", w.Code, w.Body.String())
+	}
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/sites/kunde-c", nil))
+	for _, want := range []string{"18667, davon 1884× 4xx und 0× 5xx", "nginx error", "upstream timed out"} {
+		if !strings.Contains(w.Body.String(), want) {
+			t.Errorf("%q fehlt auf der Detailseite", want)
+		}
+	}
+	hist, err := srv.Store.History("kunde-c", 1)
+	if err != nil || len(hist) != 1 || hist[0].Requests == nil || *hist[0].Requests != 18667 || hist[0].HTTP5xx == nil || *hist[0].HTTP5xx != 0 {
+		t.Errorf("Verlauf: %+v %v", hist, err)
+	}
+	rep.Site.Traffic.Requests = -1
+	if w := post(srv, tok, rep); w.Code == http.StatusNoContent {
+		t.Error("negative Zugriffszahl muss abgelehnt werden")
+	}
+
+	zero := 0
+	host := report.Report{Schema: 1, CollectedAt: now.Add(time.Minute), Site: report.Site{ID: "kunde-c", Name: "Server", Kind: "host"}, Host: report.Host{SSHFailed: &zero},
+		Errors: []report.LogError{{Time: now, Level: "Kernel", Message: "I/O error, dev sda", Count: 3}}}
+	if w := post(srv, tok, host); w.Code != http.StatusNoContent {
+		t.Fatalf("Ingest Host: %d %s", w.Code, w.Body.String())
+	}
+	w = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/sites/kunde-c", nil))
+	body := w.Body.String()
+	// 0 Fehlversuche ist ein Messwert und kein „nicht erfasst“.
+	if !strings.Contains(body, `SSH-Fehlversuche (24 Std.)</dt><dd class="mono">0</dd>`) || !strings.Contains(body, "I/O error, dev sda") || !strings.Contains(body, "Kernel-Meldungen") {
+		t.Errorf("Host-Detailseite ohne SSH-Zähler oder Kernel-Meldungen")
+	}
+}

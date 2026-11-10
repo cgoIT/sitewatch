@@ -52,6 +52,7 @@
       <dt>Last (1 Min.)</dt><dd class="mono">{{.HostView.Load}}</dd>
       <dt>Arbeitsspeicher</dt><dd class="mono">{{.HostView.Mem}}</dd>
       <dt>Swap</dt><dd class="mono">{{.HostView.Swap}}</dd>
+      <dt>SSH-Fehlversuche (24 Std.)</dt><dd class="mono">{{with .R.Host.SSHFailed}}{{.}}{{else}}–{{end}}</dd>
       <dt>MariaDB</dt><dd class="mono">{{if .R.Host.MariaDB}}{{.R.Host.MariaDB}}{{else}}–{{end}}</dd>
       <dt>nginx</dt><dd class="mono">{{if .R.Host.Nginx}}{{.R.Host.Nginx}}{{else}}–{{end}}</dd>
       <dt>Letztes Backup</dt><dd class="mono">{{if .R.Site.LastBackup}}{{fmtTime .R.Site.LastBackup}}{{else}}–{{end}}</dd>
@@ -72,6 +73,7 @@
       <dt>Letzter Cron-Lauf</dt><dd class="mono">{{if .R.Site.CronLastRun}}{{fmtTime .R.Site.CronLastRun}}{{else}}–{{end}}</dd>
       <dt>Offene Migrationen</dt><dd class="mono">{{if .R.Site.PendingMigrations}}{{.R.Site.PendingMigrations}}{{else}}–{{end}}</dd>
       <dt>Wartungsmodus</dt><dd class="mono">{{.Maintenance}}</dd>
+      <dt>Zugriffe (24 Std.)</dt><dd class="mono">{{with .R.Site.Traffic}}{{.Requests}}, davon {{.Status4xx}}× 4xx und {{.Status5xx}}× 5xx{{else}}–{{end}}</dd>
       <dt>Pakete insgesamt</dt><dd class="mono">{{.R.Site.PackagesTotal}}</dd>
     </dl></div></section>
     {{end}}
@@ -86,11 +88,19 @@
   </div>
   <div class="col-b">
     {{if eq .R.Site.Kind "host"}}
-    <section class="card"><h2>Systemdienste</h2><div class="pad">{{with .R.Host.Systemd}}{{if .Failed}}<ul class="reasons" style="margin:0">{{range .Failed}}<li class="mono">{{.}}</li>{{end}}</ul><p class="muted" style="margin-bottom:0">Fehlgeschlagene Units; auf dem Server mit <span class="mono">systemctl --failed</span> prüfen.</p>{{else}}<span class="muted">Keine fehlgeschlagenen Units.</span>{{end}}{{else}}<span class="muted">Nicht erfasst (kein systemd).</span>{{end}}</div></section>
+    <section class="card"><h2>Systemdienste</h2><div class="pad">{{with .R.Host.Systemd}}{{if .Failed}}<ul class="reasons" style="margin:0">{{range .Failed}}<li class="mono">{{.}}{{if and ($.Offer.Has "journal-unit") (has $.Offer.Units .)}} <form method="post" action="/jobs" style="display:inline"><input type="hidden" name="site" value="{{$.R.Site.ID}}"><input type="hidden" name="action" value="journal-unit"><input type="hidden" name="arg" value="{{.}}"><button class="btn" type="submit" style="margin-left:8px">Journal anzeigen</button></form>{{end}}</li>{{end}}</ul><p class="muted" style="margin-bottom:0">Fehlgeschlagene Units; auf dem Server mit <span class="mono">systemctl --failed</span> prüfen{{if $.Offer.Has "journal-unit"}} oder das Journal hier abrufen (letzte 200 Zeilen){{end}}.</p>{{else}}<span class="muted">Keine fehlgeschlagenen Units.</span>{{end}}{{else}}<span class="muted">Nicht erfasst (kein systemd).</span>{{end}}</div></section>
     <section class="card"><h2>Betriebssystem-Updates <span class="muted" style="font-weight:400">{{with .R.Host.Updates}}· {{.Total}} offen, davon {{.Security}} Sicherheit{{end}}</span></h2>
+      {{if or (.Offer.Has "apt-update") (.Offer.Has "apt-upgrade")}}<div class="pad" style="display:flex;flex-wrap:wrap;gap:8px">
+        {{if .Offer.Has "apt-update"}}<form method="post" action="/jobs"><input type="hidden" name="site" value="{{.R.Site.ID}}"><input type="hidden" name="action" value="apt-update"><button class="btn" type="submit">Paketlisten aktualisieren</button></form>{{end}}
+        {{if .Offer.Has "apt-upgrade"}}<a class="btn danger" style="text-decoration:none" href="/jobs/new?site={{.R.Site.ID}}&amp;action=apt-upgrade">Updates einspielen …</a>{{end}}</div>{{end}}
       <div class="scroll"><table style="font-size:12px"><thead><tr><th>Paket</th><th>Installiert</th><th>Verfügbar</th><th>Hinweis</th></tr></thead><tbody>
       {{with .R.Host.Updates}}{{range .Packages}}<tr><td class="mono" data-label="Paket">{{.Name}}</td><td class="mono" data-label="Installiert">{{.Installed}}</td><td class="mono" data-label="Verfügbar">{{.New}}</td><td data-label="Hinweis">{{if .Security}}<span class="badge warn">▲ Sicherheit</span>{{end}}</td></tr>
       {{else}}<tr><td colspan="4" class="muted">Keine offenen Updates.</td></tr>{{end}}{{else}}<tr><td colspan="4" class="muted">Nicht erfasst (kein apt).</td></tr>{{end}}
+      </tbody></table></div></section>
+    <section class="card"><h2>Kernel-Meldungen <span class="muted" style="font-weight:400">· Fehler der letzten 24 Stunden, gruppiert</span></h2>
+      <div class="scroll"><table><thead><tr><th>Zeit</th><th>Meldung</th><th>Anzahl</th></tr></thead><tbody>
+      {{range .R.Errors}}<tr><td class="mono" data-label="Zeit">{{fmtTime .Time}}</td><td class="mono msg" style="font-size:13px" data-label="Meldung">{{.Message}}</td><td class="mono" data-label="Anzahl">{{.Count}}×</td></tr>
+      {{else}}<tr><td colspan="3" class="muted">Keine Fehler im Zeitfenster.</td></tr>{{end}}
       </tbody></table></div></section>
     <section class="card"><h2>Netzwerk</h2><div class="pad">{{with .R.Host.Network}}<dl class="kv">
       {{range .Interfaces}}<dt>{{.Name}}</dt><dd class="mono" style="font-size:12px;overflow-wrap:anywhere">{{range .Addrs}}{{.}}<br>{{end}}{{if .MAC}}<span class="muted">{{.MAC}}</span>{{end}}</dd>
@@ -119,6 +129,7 @@
       {{end}}</div></section>
     {{else}}
     <section class="card"><h2>Pakete mit Updates <span class="muted" style="font-weight:400">· {{.OpenUpdates}} offen von {{.R.Site.PackagesTotal}}</span></h2>
+      {{if .Offer.Has "contao-update"}}<div class="pad"><a class="btn danger" style="text-decoration:none" href="/jobs/new?site={{.R.Site.ID}}&amp;action=contao-update">Contao-Update starten …</a></div>{{end}}
       <div class="scroll"><table><thead><tr><th>Paket</th><th>Installiert</th><th>Verfügbar</th><th>Hinweis</th></tr></thead><tbody>
       {{range .Packages}}<tr><td class="mono" data-label="Paket">{{.Name}}</td><td class="mono" data-label="Installiert">{{.Installed}}</td><td class="mono" data-label="Verfügbar">{{.Latest}}</td>
         <td data-label="Hinweis"><span class="badge {{.Class}}">{{.Label}}</span>{{if .Abandoned}} <span class="badge warn">▲ aufgegeben</span>{{end}}</td></tr>
@@ -129,7 +140,7 @@
       {{range .Ignored}}<tr><td class="mono" data-label="Paket">{{.Name}}</td><td class="mono" data-label="Installiert">{{.Installed}}</td><td class="mono" data-label="Verfügbar">{{.Latest}}</td><td data-label="Hinweis"><span class="badge off">{{.Label}}</span></td></tr>{{end}}
       </tbody></table></div></details></section>{{end}}
     <section class="card"><h2>Letzte Fehler <span class="muted" style="font-weight:400">· gruppiert, neueste zuerst</span></h2>
-      <div class="scroll"><table><thead><tr><th>Zeit</th><th>Level</th><th>Meldung</th><th>Anzahl</th></tr></thead><tbody>
+      <div class="scroll"><table><thead><tr><th>Zeit</th><th>Quelle/Level</th><th>Meldung</th><th>Anzahl</th></tr></thead><tbody>
       {{range .R.Errors}}<tr><td class="mono" data-label="Zeit">{{fmtTime .Time}}</td><td style="font-weight:500" data-label="Level">{{.Level}}</td><td class="mono msg" style="font-size:13px" data-label="Meldung">{{.Message}}</td><td class="mono" data-label="Anzahl">{{.Count}}×</td></tr>
       {{else}}<tr><td colspan="4" class="muted">Keine Fehler im Zeitfenster.</td></tr>{{end}}
       </tbody></table></div></section>

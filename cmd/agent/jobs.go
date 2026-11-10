@@ -238,7 +238,15 @@ func (r *jobRunner) handle(ctx context.Context, env sign.Envelope) {
 		r.reject(ctx, p.ID, fmt.Sprintf("Aktion %q gilt nicht für Sites der Art %q", p.Action, site.Kind))
 		return
 	}
-	prog, args, dir, err := commandFor(act, *site, cfg, r.bs.Roots)
+	if (act.Arg == "") != (p.Arg == "") || (act.Arg == jobs.ArgUnit && !jobs.ValidUnit(p.Arg)) {
+		r.reject(ctx, p.ID, fmt.Sprintf("Aktion %q: Angabe %q fehlt, ist überzählig oder ungültig", p.Action, p.Arg))
+		return
+	}
+	if act.Arg == jobs.ArgUnit && !unitFailed(ctx, p.Arg) { // das Journal gibt es nur für Units, die der Server selbst gerade als fehlgeschlagen führt
+		r.reject(ctx, p.ID, fmt.Sprintf("Unit %q ist nicht (mehr) fehlgeschlagen", p.Arg))
+		return
+	}
+	prog, args, dir, err := commandFor(act, p.Arg, *site, cfg, r.bs.Roots)
 	if err != nil {
 		r.reject(ctx, p.ID, err.Error())
 		return
@@ -266,9 +274,25 @@ func (r *jobRunner) handle(ctx context.Context, env sign.Envelope) {
 	}
 }
 
-// commandFor baut den Befehl der Aktion aus der festen Liste. Dem Auftrag selbst entnimmt der Agent nichts außer dem Namen der Aktion.
-// Site-Aktionen rufen das Werkzeug des Website-Stacks (<SITE_DIR>/bin/site) im Site-Verzeichnis auf, Console-Aktionen die Contao-Konsole.
-func commandFor(act jobs.Action, site agentcfg.Site, cfg agentcfg.Config, roots []string) (prog string, args []string, dir string, err error) {
+// unitFailed fragt systemd, ob die Unit gerade fehlgeschlagen ist.
+func unitFailed(ctx context.Context, unit string) bool {
+	ctx, stop := context.WithTimeout(ctx, 10*time.Second)
+	defer stop()
+	return exec.CommandContext(ctx, "systemctl", "is-failed", "--quiet", unit).Run() == nil
+}
+
+// commandFor baut den Befehl der Aktion aus der festen Liste. Dem Auftrag selbst entnimmt der Agent nichts außer dem Namen der Aktion
+// und, bei Aktionen mit Arg, dem vom Aufrufer geprüften Wert arg (letztes Argument).
+// Site-Aktionen rufen das Werkzeug des Website-Stacks (<SITE_DIR>/bin/site) im Site-Verzeichnis auf, Console-Aktionen die Contao-Konsole,
+// Host-Aktionen ein Programm des Servers.
+func commandFor(act jobs.Action, arg string, site agentcfg.Site, cfg agentcfg.Config, roots []string) (prog string, args []string, dir string, err error) {
+	if len(act.Host) > 0 {
+		args = append([]string(nil), act.Host[1:]...)
+		if act.Arg != "" {
+			args = append(args, arg)
+		}
+		return act.Host[0], args, "/", nil
+	}
 	if len(act.Site) > 0 {
 		dir = site.Env["SITE_DIR"]
 		if dir == "" {

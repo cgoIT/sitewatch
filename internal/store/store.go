@@ -28,6 +28,7 @@ type Sample struct {
 	BackupAgeSec      *int
 	BadSectors        *int   // Summe über alle Platten (SMART); bei verdichteten Punkten das Maximum im Block
 	RaidMissing       *int   // fehlende Platten in allen RAID-Verbünden; bei verdichteten Punkten das Maximum im Block
+	Requests, HTTP5xx *int   // Zugriffe und 5xx-Antworten der letzten 24 Stunden (nginx-Access-Log); nil = nicht erfasst; verdichtet: 5xx das Maximum im Block
 	WearPct           *int   // nur in Plattenreihen (web), nie aus samples
 	WrittenBytes      *int64 // dito; in der Kurve „pro Tag“ die Differenz der Tageswerte
 	Contao, PHP       string
@@ -44,6 +45,9 @@ func SampleOf(e Entry, level int) Sample {
 	}
 	for _, le := range r.Errors {
 		s.Errors += le.Count
+	}
+	if t := r.Site.Traffic; t != nil {
+		s.Requests, s.HTTP5xx = &t.Requests, &t.Status5xx
 	}
 	age := func(t *time.Time) *int {
 		if t == nil {

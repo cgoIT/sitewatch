@@ -285,16 +285,29 @@ func actionLabel(name string) string {
 	return name
 }
 
+// jobLabel: Name der Aktion samt Angabe des Auftrags (z. B. die Unit). Die Angabe steht nur im signierten Auftrag, nicht in einer eigenen Spalte.
+func jobLabel(j store.Job) string {
+	var env sign.Envelope
+	var p sign.JobPayload
+	if json.Unmarshal(j.Envelope, &env) == nil && json.Unmarshal(env.Payload, &p) == nil && p.Arg != "" {
+		return actionLabel(j.Action) + " " + p.Arg
+	}
+	return actionLabel(j.Action)
+}
+
 // siteChoice ist eine Site in der Auswahl für einen neuen Auftrag.
 type siteChoice struct {
 	ID, Label, Agent, Kind string
 	// Die Aktionen, die der Agent gerade angemeldet hat und die zur Art der Site passen, nach Stufe getrennt.
 	Read, Change, Critical []jobs.Action
+	// PerUnit: lesende Aktionen, die eine Unit brauchen; angeboten je Eintrag in Units (fehlgeschlagene Units laut letztem Report).
+	PerUnit []jobs.Action
+	Units   []string
 }
 
 // Has sagt, ob die Aktion für die Site angeboten wird (in irgendeiner Stufe).
 func (c siteChoice) Has(action string) bool {
-	for _, l := range [][]jobs.Action{c.Read, c.Change, c.Critical} {
+	for _, l := range [][]jobs.Action{c.Read, c.Change, c.Critical, c.PerUnit} {
 		if slices.ContainsFunc(l, func(a jobs.Action) bool { return a.Name == action }) {
 			return true
 		}
@@ -303,9 +316,9 @@ func (c siteChoice) Has(action string) bool {
 }
 
 // Any sagt, ob für die Site überhaupt eine Aktion angeboten wird.
-func (c siteChoice) Any() bool { return len(c.Read)+len(c.Change)+len(c.Critical) > 0 }
+func (c siteChoice) Any() bool { return len(c.Read)+len(c.Change)+len(c.Critical)+len(c.PerUnit) > 0 }
 
-// contaoSites: die Sites, für die Aufträge möglich sind (Contao oder PHP, einem Agenten zugewiesen).
+// contaoSites: die Sites, für die Aufträge möglich sind (Contao, PHP oder Host, einem Agenten zugewiesen).
 func (s *Server) contaoSites() ([]siteChoice, error) {
 	as, err := s.Agents.List()
 	if err != nil {
@@ -317,13 +330,23 @@ func (s *Server) contaoSites() ([]siteChoice, error) {
 			continue
 		}
 		for _, st := range a.Config.Sites {
-			if st.Kind == "host" {
-				continue
-			}
 			c := siteChoice{ID: st.ID, Label: st.ID + " (" + a.ID + ")", Agent: a.ID, Kind: st.Kind}
+			if st.Kind == "host" {
+				if e, ok, _ := s.Store.Get(st.ID); ok && e.Report.Host.Systemd != nil {
+					for _, u := range e.Report.Host.Systemd.Failed { // Units, die der Agent ablehnen würde, gar nicht erst anbieten
+						if jobs.ValidUnit(u) {
+							c.Units = append(c.Units, u)
+						}
+					}
+				}
+			}
 			for _, act := range jobs.Actions {
 				if !act.AllowsKind(st.Kind) || !slices.Contains(st.Actions, act.Name) || !s.actionOffered(a.ID, act.Name) ||
 					(strings.HasPrefix(act.Name, "db-") && st.MariaDB != nil && !*st.MariaDB) { // ohne Datenbank keine DB-Aktionen
+					continue
+				}
+				if act.Arg != "" {
+					c.PerUnit = append(c.PerUnit, act)
 					continue
 				}
 				switch act.Level {
@@ -363,7 +386,7 @@ func (s *Server) jobList(w http.ResponseWriter, r *http.Request) {
 	var rows []jobRow
 	for _, j := range list {
 		lb, cl := jobStatus(j, now)
-		rows = append(rows, jobRow{j.ID, j.Site, j.Action, actionLabel(j.Action), j.ApprovedBy, fmtStamp(j.CreatedAt), lb, cl})
+		rows = append(rows, jobRow{j.ID, j.Site, j.Action, jobLabel(j), j.ApprovedBy, fmtStamp(j.CreatedAt), lb, cl})
 	}
 	s.render(w, "jobs.html", map[string]any{"Rows": rows, "Sites": sites, "Top": "jobs", "Error": r.URL.Query().Get("error")})
 }
@@ -411,7 +434,7 @@ func (s *Server) jobCreate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "ungültige Eingabe", http.StatusBadRequest)
 		return
 	}
-	site, action := r.PostForm.Get("site"), r.PostForm.Get("action")
+	site, action, arg := r.PostForm.Get("site"), r.PostForm.Get("action"), r.PostForm.Get("arg")
 	a, okA := jobs.Find(action)
 	c, okS, err := s.siteChoice(site)
 	if err != nil {
@@ -433,13 +456,19 @@ func (s *Server) jobCreate(w http.ResponseWriter, r *http.Request) {
 	case !c.Has(action):
 		http.Error(w, errNotAllowedForSite, http.StatusConflict)
 		return
+	case (a.Arg == "") != (arg == ""):
+		http.Error(w, "Angabe zur Aktion fehlt oder ist überzählig", http.StatusBadRequest)
+		return
+	case a.Arg == jobs.ArgUnit && (!jobs.ValidUnit(arg) || !slices.Contains(c.Units, arg)): // nie eine frei eingegebene Unit, nur was der Report nennt
+		http.Error(w, "Die Unit ist laut letztem Report nicht fehlgeschlagen.", http.StatusConflict)
+		return
 	case a.NeedsID() && strings.TrimSpace(r.PostForm.Get("confirm")) != site:
 		s.jobConfirmPage(w, site, action, "Die Site-ID stimmt nicht. Zur Bestätigung muss sie genau eingetragen werden.", http.StatusUnprocessableEntity)
 		return
 	}
 	now := s.Now()
 	id := newJobID()
-	env, err := sign.Job(s.SignKey, sign.JobPayload{ID: id, Agent: c.Agent, Site: site, Action: action, IssuedAt: now, ExpiresAt: now.Add(jobs.TTL)})
+	env, err := sign.Job(s.SignKey, sign.JobPayload{ID: id, Agent: c.Agent, Site: site, Action: action, Arg: arg, IssuedAt: now, ExpiresAt: now.Add(jobs.TTL)})
 	if err != nil {
 		log.Printf("jobs: signieren: %v", err)
 		http.Error(w, "interner Fehler", http.StatusInternalServerError)
@@ -447,6 +476,10 @@ func (s *Server) jobCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	raw, _ := json.Marshal(env)
 	err = s.Jobs.CreateJob(store.Job{ID: id, Agent: c.Agent, Site: site, Action: action, ApprovedBy: who, CreatedAt: now, ExpiresAt: now.Add(jobs.TTL), Envelope: raw})
+	if errors.Is(err, store.ErrJobBusy) && a.Arg != "" { // die Bestätigungsseite kennt keine Angabe
+		http.Error(w, err.Error()+". Erst abwarten oder abbrechen.", http.StatusConflict)
+		return
+	}
 	if errors.Is(err, store.ErrJobBusy) {
 		s.jobConfirmPage(w, site, action, err.Error()+". Erst abwarten oder abbrechen.", http.StatusConflict)
 		return
@@ -456,7 +489,7 @@ func (s *Server) jobCreate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "interner Fehler", http.StatusInternalServerError)
 		return
 	}
-	log.Printf("jobs: %s %s auf %q (Agent %q) freigegeben von %q", id, action, site, c.Agent, who)
+	log.Printf("jobs: %s %s %q auf %q (Agent %q) freigegeben von %q", id, action, arg, site, c.Agent, who)
 	s.hub.notify("agent:" + c.Agent)
 	http.Redirect(w, r, "/jobs/"+id, http.StatusSeeOther)
 }
@@ -500,7 +533,7 @@ func (s *Server) jobShow(w http.ResponseWriter, r *http.Request) {
 	// Nur diese Seite darf ein Skript ausführen (Nonce), und nur zur eigenen Adresse (EventSource). Alle anderen Seiten bleiben ohne JavaScript.
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; manifest-src 'self'; script-src 'nonce-"+nonce+"'; connect-src 'self'; base-uri 'none'; form-action 'self'")
 	s.render(w, "job.html", map[string]any{
-		"Job": j, "Label": actionLabel(j.Action), "Status": lb, "Class": cl, "Output": store.Text(chunks), "Last": last,
+		"Job": j, "Label": jobLabel(j), "Status": lb, "Class": cl, "Output": store.Text(chunks), "Last": last,
 		"Live": !jobEnded(j, now), "Nonce": nonce, "Created": fmtStamp(j.CreatedAt), "Top": "jobs",
 		"Started": stamp(j.StartedAt), "Finished": stamp(j.FinishedAt), "Expires": fmtStamp(j.ExpiresAt),
 	})
