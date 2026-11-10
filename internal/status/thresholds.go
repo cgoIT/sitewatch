@@ -129,6 +129,8 @@ func (c Config) with(vals map[string]int) (Config, error) {
 		}
 	}
 	switch r := c.Retention; {
+	case c.HTTP5xxPct > 100:
+		return c, fmt.Errorf("Antworten mit 5xx: der Anteil darf höchstens 100 %% betragen")
 	case c.DiskWarn > 100 || c.DiskCrit > c.DiskWarn:
 		return c, fmt.Errorf("Freier Speicher: kritisch darf nicht über der Warnung liegen, die Warnung höchstens 100 %%")
 	case c.DiskWearWarn > c.DiskWearCrit || c.DiskSpareWarn > 100:

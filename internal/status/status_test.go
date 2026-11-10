@@ -23,6 +23,7 @@ func TestEvaluate(t *testing.T) {
 	}{
 		{"ok", func(r *report.Report) {}, time.Minute, OK},
 		{"5xx: Anzahl und Anteil erreicht", func(r *report.Report) { r.Site.Traffic = &report.Traffic{Requests: 1000, Status5xx: 20} }, time.Minute, Warn},
+		{"5xx: nicht erfasst", func(r *report.Report) { r.Site.Traffic = nil }, time.Minute, OK},
 		{"5xx: zu wenige", func(r *report.Report) { r.Site.Traffic = &report.Traffic{Requests: 100, Status5xx: 19} }, time.Minute, OK},
 		{"5xx: Anteil zu klein", func(r *report.Report) { r.Site.Traffic = &report.Traffic{Requests: 100000, Status5xx: 50} }, time.Minute, OK},
 		{"veraltet", func(r *report.Report) {}, time.Hour, Crit},

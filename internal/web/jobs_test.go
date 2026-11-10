@@ -466,6 +466,13 @@ func TestAgentPageSavesIgnoredUserAgents(t *testing.T) {
 	if w := do(srv, "GET", "/agents/server1", nil, nil); !strings.Contains(w.Body.String(), "Kuma\nmonitor/1.0</textarea>") {
 		t.Error("Formular zeigt die Liste nicht")
 	}
+	form.Del("ignore_ua") // älteres Formular ohne das Feld: die Liste bleibt
+	if w := do(srv, "POST", "/agents/server1", form, nil); w.Code != http.StatusSeeOther {
+		t.Fatalf("speichern ohne Feld: %d", w.Code)
+	}
+	if a, _ = srv.Agents.Get("server1"); len(a.Config.IgnoreUserAgents) != 2 {
+		t.Errorf("Liste ging verloren: %v", a.Config.IgnoreUserAgents)
+	}
 	form.Set("ignore_ua", strings.Repeat("x", 101))
 	if w := do(srv, "POST", "/agents/server1", form, nil); w.Code == http.StatusSeeOther {
 		t.Error("zu langer Eintrag muss abgelehnt werden")

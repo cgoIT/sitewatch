@@ -3,6 +3,7 @@ package agentcfg
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -157,5 +158,21 @@ func TestSiteActionsAreChecked(t *testing.T) {
 		if err := checkSite(0, s); err == nil {
 			t.Errorf("%s: muss abgelehnt werden", name)
 		}
+	}
+}
+
+func TestIgnoreUserAgents(t *testing.T) {
+	site := []Site{{ID: "a", Kind: "host"}}
+	for name, list := range map[string][]string{"leer": {""}, "zu lang": {strings.Repeat("x", 101)}, "Steuerzeichen": {"a\nb"}, "zu viele": make([]string, 21)} {
+		if err := (Remote{Sites: site, IgnoreUserAgents: list}).Validate(nil); err == nil {
+			t.Errorf("%s: muss abgelehnt werden", name)
+		}
+	}
+	r := Remote{Sites: site, IgnoreUserAgents: []string{"Kuma"}}
+	if err := r.Validate(nil); err != nil {
+		t.Fatal(err)
+	}
+	if c := (Bootstrap{}).Config(r); len(c.IgnoreUserAgents) != 1 || c.IgnoreUserAgents[0] != "Kuma" {
+		t.Errorf("die Liste muss beim Agenten ankommen: %v", c.IgnoreUserAgents)
 	}
 }

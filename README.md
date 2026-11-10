@@ -14,7 +14,7 @@ Was das Dashboard zeigt (je Site und für den Server):
   (nur `error` und höher bzw. PHP Fatal/Parse error; die Sperrregel „access forbidden by rule“ zählt nicht) sowie die Zugriffe der
   letzten 24 Stunden aus `logs/nginx/access.log` als Summen (Anfragen, 4xx, 5xx; ohne Anfragen vom Server selbst). Adressen und Pfade
   der Besucher verlassen den Server nicht. Eigene Monitore (z. B. Uptime Kuma) schließt man auf der Agentenseite über ihren User-Agent
-  aus (`ignore_user_agents`). Sitewatch warnt, wenn die 5xx-Antworten Anzahl *und* Anteil aus den Einstellungen erreichen
+  aus (`ignore_user_agents`; ältere Agenten übergehen die Liste ohne Fehler und zählen weiter mit). Sitewatch warnt, wenn die 5xx-Antworten Anzahl *und* Anteil aus den Einstellungen erreichen
   (Standard: 20 und 1 %).
 - freier Speicherplatz, Alter des letzten Backups, Ablauf des TLS-Zertifikats, Wartungsmodus
 - SMART-Zustand der Platten (nur `host`-Einträge, über `smartctl` aus smartmontools; der Agent braucht Leserechte auf die Geräte, i. d. R. Root): Gesamturteil „failed“ ist kritisch, defekte/umgelagerte Sektoren sind eine Warnung. Fehlt `smartctl`, erscheint ein Problem („Teilweise keine Daten“); auf VMs ohne echte Platten schaltet man die Abfrage je Site ab (siehe „SMART und RAID“ unten)

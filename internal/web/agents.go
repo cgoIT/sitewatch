@@ -361,6 +361,9 @@ func (s *Server) agentSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cfg := parseSites(r)
+	if _, ok := r.PostForm["ignore_ua"]; !ok { // Formular ohne das Feld (vor dem Update geöffnet): die Liste nicht leeren
+		cfg.IgnoreUserAgents = a.Config.IgnoreUserAgents
+	}
 	if !s.jobsUI() { // ohne Aufträge zeigt das Formular keine Auswahl: nichts überschreiben
 		for i := range cfg.Sites {
 			for _, old := range a.Config.Sites {
