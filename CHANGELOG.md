@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.2](https://github.com/cgoIT/sitewatch/compare/v1.8.1...v1.8.2) (2026-11-10)
+
+
+### Bug Fixes
+
+* **collect:** wegen Phasing zurückgestellte apt-Pakete nicht als offene Updates zählen ([5327ccc](https://github.com/cgoIT/sitewatch/commit/5327ccc2fb2ff1a6af8df879a8903021e8f83cd9))
+
 ## [1.8.1](https://github.com/cgoIT/sitewatch/compare/v1.8.0...v1.8.1) (2026-11-10)
 
 
