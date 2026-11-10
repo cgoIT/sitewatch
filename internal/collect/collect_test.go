@@ -2,8 +2,10 @@ package collect
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -297,5 +299,116 @@ func TestParseSMARTWearOutOfRange(t *testing.T) {
 	d, ok, bad := parseSMART(`{"smart_status":{"passed":true},"nvme_smart_health_information_log":{"media_errors":0,"percentage_used":300,"available_spare":90}}`)
 	if !ok || !bad || d.WearPct != nil || d.SpareLeftPct == nil || *d.SpareLeftPct != 90 {
 		t.Errorf("ok=%v bad=%v %+v", ok, bad, d)
+	}
+}
+
+// Beispieldaten: Zeilen im Format der Logs des Website-Stacks (<SITE_DIR>/logs), Inhalte erfunden.
+func TestStackLogsAndTraffic(t *testing.T) {
+	now := time.Date(2026, 11, 10, 12, 0, 0, 0, time.Local)
+	logs := t.TempDir()
+	write := func(name, content string) {
+		t.Helper()
+		p := filepath.Join(logs, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(p, now, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("nginx/error.log", `2026/11/10 05:45:44 [error] 38#38: *37167 access forbidden by rule, client: 192.0.2.1, server: _, request: "GET /.git/config HTTP/1.1", host: "example.org"
+2026/11/10 06:00:00 [error] 38#38: *1 upstream timed out (110: Operation timed out) while reading response header from upstream, client: 192.0.2.1, server: _, request: "GET / HTTP/1.1"
+2026/11/10 06:00:01 [error] 39#39: *2 upstream timed out (110: Operation timed out) while reading response header from upstream, client: 192.0.2.2, server: _, request: "GET /a HTTP/1.1"
+2026/11/10 03:16:47 [warn] 33#33: *9272 a client request body is buffered to a temporary file /tmp/client_temp/0000000001, client: 192.0.2.3
+2026/11/10 03:00:00 [notice] 1#1: exiting
+`)
+	write("nginx/backup/error.log.1", "2026/11/09 23:00:00 [crit] 1#1: gestern, noch im Fenster\n2026/11/08 01:00:00 [crit] 1#1: zu alt\n")
+	write("php/fpm-error.log", `[10-Nov-2026 00:04:07] WARNING: [pool www] child 33075, script '/var/www/html/public/index.php' (request: "GET /index.php") executing too slow (2.005767 sec), logging
+[10-Nov-2026 00:04:07] NOTICE: child 33075 stopped for tracing
+[10-Nov-2026 01:00:00] ERROR: unable to read what child say: Bad file descriptor (9)
+`)
+	write("php/error.log", `[10-Nov-2026 02:00:00 Europe/Berlin] PHP Deprecated:  Implicitly marking parameter $dc as nullable is deprecated in /var/www/html/x.php on line 38
+[10-Nov-2026 02:00:01 Europe/Berlin] PHP Warning:  include(): Failed opening '/var/www/html/x.php' for inclusion in /var/www/html/y.php on line 576
+[10-Nov-2026 02:00:02 Europe/Berlin] PHP Fatal error:  Uncaught Error: Class "X\Plugin" not found in /var/www/html/plugins.php:16
+Stack trace:
+#0 /var/www/html/vendor/x.php(46): include()
+  thrown in /var/www/html/plugins.php on line 16
+`)
+	s := newErrorSet(now, 24*time.Hour)
+	if err := s.addStack(logs); err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]int{}
+	for _, e := range s.list(20) {
+		got[e.Level+"|"+e.Message] = e.Count
+	}
+	want := map[string]int{
+		"nginx error|upstream timed out (110: Operation timed out) while reading response header from upstream": 2, // ohne Adresse, gruppiert
+		"nginx crit|gestern, noch im Fenster":                                                        1,
+		"FPM ERROR|unable to read what child say: Bad file descriptor (9)":                           1,
+		`PHP Fatal error|Uncaught Error: Class "X\Plugin" not found in /var/www/html/plugins.php:16`: 1,
+	}
+	if len(got) != len(want) {
+		t.Errorf("Fehler: %v", got)
+	}
+	for k, n := range want {
+		if got[k] != n {
+			t.Errorf("%q: %d statt %d", k, got[k], n)
+		}
+	}
+
+	// Vorhanden, aber nicht lesbar: ein Problem, kein stilles "keine Fehler" (als root nicht prüfbar).
+	if os.Getuid() != 0 {
+		locked := filepath.Join(logs, "php/backup/error.log.1")
+		write("php/backup/error.log.1", "x\n")
+		_ = os.Chmod(locked, 0)
+		if err := newErrorSet(now, 24*time.Hour).addStack(logs); err == nil {
+			t.Error("nicht lesbares Log muss gemeldet werden")
+		}
+		_ = os.Remove(locked)
+	}
+
+	line := func(at time.Time, status int, addr, ua string) string {
+		return fmt.Sprintf(`{"log_type":"access","time":%q,"remote_addr":%q,"request":"GET / HTTP/1.1","status":%d,"user_agent":%q,"request_time":0.103}`+"\n", at.Format(time.RFC3339), addr, status, ua)
+	}
+	if tr, err := ReadTraffic(logs, now, 24*time.Hour); tr != nil || err != nil {
+		t.Errorf("ohne Access-Log: %+v %v", tr, err)
+	}
+	write("nginx/access.log", line(now.Add(-time.Hour), 200, "192.0.2.1", "Mozilla/5.0 \"x\"")+line(now.Add(-2*time.Hour), 404, "192.0.2.1", "bot")+
+		line(now.Add(-3*time.Hour), 502, "192.0.2.1", "bot")+line(now.Add(-time.Hour), 200, "127.0.0.1", "curl/8.22.0")+line(now.Add(-time.Hour), 200, "192.0.2.9", "Sitewatch-Uptime")+"kaputt\n")
+	write("nginx/backup/access.log.1", line(now.Add(-20*time.Hour), 200, "192.0.2.1", "x")+line(now.Add(-30*time.Hour), 200, "192.0.2.1", "x"))
+	tr, err := ReadTraffic(logs, now, 24*time.Hour)
+	if err != nil || tr == nil || *tr != (report.Traffic{Requests: 4, Status4xx: 1, Status5xx: 1}) {
+		t.Errorf("Zugriffe: %+v %v", tr, err)
+	}
+	write("nginx/access.log", `192.0.2.1 - - [10/Nov/2026:00:03:55 +0100] "GET / HTTP/1.1" 200 14`+"\n")
+	if _, err := ReadTraffic(logs, now, 24*time.Hour); err == nil {
+		t.Error("unbekanntes Format muss ein Fehler sein, keine Null")
+	}
+}
+
+func TestParseKernelLog(t *testing.T) {
+	now := time.Date(2026, 11, 10, 12, 0, 0, 0, time.UTC)
+	out := "2026-11-10T05:45:44+0100 srv kernel: Out of memory: Killed process 123 (php-fpm)\n" +
+		"2026-11-10T06:45:44+01:00 srv kernel: Out of memory: Killed process 123 (php-fpm)\n" +
+		"2026-11-10T07:00:00+0100 srv kernel: I/O error, dev sda, sector 42\n-- No entries --\n"
+	got := ParseKernelLog(out, now, 24*time.Hour, 20)
+	if len(got) != 2 || got[0].Message != "I/O error, dev sda, sector 42" || got[1].Count != 2 || got[1].Level != "Kernel" {
+		t.Errorf("%+v", got)
+	}
+	re := regexp.MustCompile(sshFailRe)
+	for line, want := range map[string]bool{
+		"Failed password for invalid user admin from 192.0.2.1 port 4711 ssh2":        true,
+		"Connection closed by authenticating user root 192.0.2.1 port 4711 [preauth]": true,
+		"Disconnected from invalid user x 192.0.2.1 port 4711 [preauth]":              true,
+		"Accepted publickey for root from 192.0.2.1 port 4711 ssh2":                   false,
+		"Invalid user admin from 192.0.2.1 port 4711":                                 false, // die Folgezeile zählt, sonst doppelt
+	} {
+		if re.MatchString(line) != want {
+			t.Errorf("%q: %v", line, !want)
+		}
 	}
 }

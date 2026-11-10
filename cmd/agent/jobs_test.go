@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -393,5 +394,56 @@ func TestRefreshesConfigBeforeJudgingJob(t *testing.T) {
 	r.handle(context.Background(), jobFor(t, priv, "r1", "cgo", "site-status"))
 	if st, out := f.states(); strings.Join(st, ",") != "running,ok" || !strings.Contains(out, "ran") {
 		t.Errorf("mit frischer Konfiguration muss der Auftrag laufen: %v %q", st, out)
+	}
+}
+
+// hostTools legt Stubs für journalctl, systemd-run und systemctl in den PATH; systemctl is-failed gelingt nur für failed.service.
+func hostTools(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	for name, script := range map[string]string{
+		"journalctl":  `echo "journal: $*"`,
+		"systemd-run": `echo "run: $*"`,
+		"systemctl":   `[ "$1 $2 $3" = "is-failed --quiet failed.service" ]`,
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\n"+script), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+func TestHostActions(t *testing.T) {
+	hostTools(t)
+	f := &fakeSitewatch{}
+	r, priv, _, _ := setupRunner(t, allActions("host"), `echo php`, f)
+	cfg, _ := r.cur.get()
+	cfg.Sites = append(cfg.Sites, agentcfg.Site{ID: "srv", Kind: "host", Actions: allActions("host")})
+	r.cur.set(cfg)
+	job := func(id, site, action, arg string) (string, string) {
+		f.mu.Lock()
+		f.events = nil
+		f.mu.Unlock()
+		now := time.Now()
+		env, err := sign.Job(priv, sign.JobPayload{ID: id, Agent: "server1", Site: site, Action: action, Arg: arg, IssuedAt: now, ExpiresAt: now.Add(10 * time.Minute)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		r.handle(context.Background(), env)
+		st, out := f.states()
+		return strings.Join(st, ","), out
+	}
+	if st, out := job("h1", "srv", "journal-unit", "failed.service"); st != "running,ok" || !strings.Contains(out, "journal: --no-pager -n 200 -u failed.service") {
+		t.Errorf("Journal: %s %q", st, out)
+	}
+	if st, out := job("h2", "srv", "apt-upgrade", ""); st != "running,ok" || !strings.Contains(out, "--setenv=DEBIAN_FRONTEND=noninteractive apt-get -y") || !strings.HasSuffix(strings.TrimSpace(out), "--with-new-pkgs upgrade") {
+		t.Errorf("apt-upgrade: %s %q", st, out)
+	}
+	// Abgelehnt: Unit nicht fehlgeschlagen, Option statt Unit, fehlende oder überzählige Angabe, Host-Aktion auf einer Contao-Site.
+	for i, c := range [][3]string{{"srv", "journal-unit", "ok.service"}, {"srv", "journal-unit", "--file=/etc/shadow"}, {"srv", "journal-unit", ""},
+		{"srv", "apt-update", "failed.service"}, {"cgo", "apt-update", ""}} {
+		if st, out := job(fmt.Sprintf("x%d", i), c[0], c[1], c[2]); st != "rejected" || out != "" {
+			t.Errorf("%v: %s %q", c, st, out)
+		}
 	}
 }

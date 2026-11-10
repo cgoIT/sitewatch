@@ -10,6 +10,10 @@ Was das Dashboard zeigt (je Site und für den Server):
 - Versionen von Contao, PHP, MariaDB und nginx, dazu das Ende der Herstellerunterstützung (endoflife.date)
 - offene Composer-Updates und Sicherheitshinweise (`composer outdated/audit`), mit Ausschlussregeln
 - letzte Fehler aus den Monolog-Logs, offene Contao-Migrationen, letzter Contao-Cron-Lauf
+- mit dem Website-Stack (Feld `SITE_DIR`): Fehler aus `logs/nginx/error.log`, `logs/php/error.log` und `logs/php/fpm-error.log`
+  (nur `error` und höher bzw. PHP Fatal/Parse error; die Sperrregel „access forbidden by rule“ zählt nicht) sowie die Zugriffe der
+  letzten 24 Stunden aus `logs/nginx/access.log` als Summen (Anfragen, 4xx, 5xx; ohne Anfragen vom Server selbst). Adressen und Pfade
+  der Besucher verlassen den Server nicht.
 - freier Speicherplatz, Alter des letzten Backups, Ablauf des TLS-Zertifikats, Wartungsmodus
 - SMART-Zustand der Platten (nur `host`-Einträge, über `smartctl` aus smartmontools; der Agent braucht Leserechte auf die Geräte, i. d. R. Root): Gesamturteil „failed“ ist kritisch, defekte/umgelagerte Sektoren sind eine Warnung. Fehlt `smartctl`, erscheint ein Problem („Teilweise keine Daten“); auf VMs ohne echte Platten schaltet man die Abfrage je Site ab (siehe „SMART und RAID“ unten)
 - Linux-Software-RAID (mdadm, aus `/proc/mdstat`, nur `host`-Einträge): ein degradierter oder inaktiver Verbund ist kritisch, ein als defekt markiertes Mitglied bei vollständigem Verbund eine Warnung. Hardware-RAID-Controller und ZFS/btrfs sind nicht abgedeckt (einzelne Platten hinter einem Controller nur, wenn `smartctl --scan` sie liefert)
@@ -159,9 +163,16 @@ Ein kompromittiertes Dashboard kann nie mehr auslösen. Auf der Agentenseite wä
 
 | Stufe | Aktionen |
 |---|---|
-| Anzeigen (ein Klick) | `site-status`, `site-doctor`, `site-validate-config`, `contao-snapshot-list`, `db-list` |
+| Anzeigen (ein Klick) | `site-status`, `site-doctor`, `site-validate-config`, `contao-snapshot-list`, `db-list`, `apt-update`, `journal-unit` |
 | Ändern (Bestätigungsseite) | `contao-cache-refresh`, `contao-filesync`, `contao-snapshot`, `db-snapshot`, `site-restart`, `maintenance-off` |
-| Site-ID abtippen | `maintenance-on`, `contao-update` |
+| Site-ID abtippen | `maintenance-on`, `contao-update`, `apt-upgrade` |
+
+Für `host`-Einträge gibt es `apt-update` (`apt-get update`), `apt-upgrade` (`apt-get -y --with-new-pkgs upgrade`, ohne Rückfragen;
+geänderte Konfigurationsdateien bleiben erhalten; läuft über `systemd-run` als eigene Unit, damit ein Update des Agenten selbst dpkg nicht
+unterbricht, und läuft deshalb auch nach einem Abbruch in Sitewatch zu Ende; startet das Update den Agenten neu, endet der Auftrag in Sitewatch als
+„Agent meldet sich nicht mehr“, obwohl apt durchläuft). `apt-upgrade` läuft als root: lokal nur freischalten, wo es gebraucht wird und `journal-unit` (`journalctl -n 200 -u <unit>`). `journal-unit` ist die einzige
+Aktion mit einer Angabe: Sitewatch bietet nur Units an, die der letzte Report als fehlgeschlagen nennt, und der Agent führt sie nur
+aus, wenn `systemctl is-failed` das bestätigt. Updates und das Journal lassen sich auch direkt auf der Detailseite auslösen.
 
 Die meisten Aktionen rufen `<SITE_DIR>/bin/site <befehl>` auf (das Werkzeug des Website-Stacks); der Wartungsmodus nutzt die
 Contao-Konsole. Es gibt keine freie Shell. `bin/site` läuft als Benutzer des Agenten (meist root) und darf deshalb nicht vom
@@ -179,6 +190,8 @@ Ein `host`-Eintrag hat eine eigene Detailseite und in der Übersicht eine eigene
   `-security`) sind eine Warnung, normale Updates werden nur gezählt. Sind die Paketlisten älter als 3 Tage, steht ein Hinweis unter
   „Nicht ermittelt“, weil die Zahl dann zu niedrig sein kann. Ohne `apt` bleibt der Bereich leer.
 - **Systemdienste:** `systemctl list-units --state=failed`; jede fehlgeschlagene Unit ist eine Warnung. Ohne systemd bleibt der Bereich leer.
+- **Journal:** Kernel-Fehler der letzten 24 Stunden (`journalctl -k -p err`, gruppiert; zählen wie die Fehler einer Site) und die Zahl
+  fehlgeschlagener SSH-Anmeldungen (`journalctl -t sshd -t sshd-session --grep …`, nur die Summe).
 
 Das Feld `site.outdated` (Composer) bleibt Contao-/PHP-Sites vorbehalten; für Hosts zählt `host.os_updates`.
 

@@ -133,6 +133,7 @@ type JobPayload struct {
 	Agent     string    `json:"agent"`
 	Site      string    `json:"site"`
 	Action    string    `json:"action"`
+	Arg       string    `json:"arg,omitempty"` // nur bei Aktionen mit jobs.Action.Arg; der Agent prüft den Wert
 	IssuedAt  time.Time `json:"issued_at"`
 	ExpiresAt time.Time `json:"expires_at"`
 }

@@ -108,11 +108,29 @@ func Collect(ctx context.Context, cfg Config) (report.Report, error) {
 		collectComposer(ctx, cfg, &r, problem)
 		collectContaoConsole(ctx, cfg, &r, now, problem)
 		collectMaintenance(cfg, &r, problem)
-		errs, err := ReadLogErrors(filepath.Join(cfg.Path, "var", "logs"), now, cfg.Window, cfg.MaxErrors)
-		if err != nil {
-			problem("Log nicht lesbar: %v", err)
+	}
+	if cfg.Kind != "host" {
+		errs := newErrorSet(now, cfg.Window)
+		if cfg.Kind == "contao" {
+			if err := errs.addContao(filepath.Join(cfg.Path, "var", "logs")); err != nil {
+				problem("Log nicht lesbar: %v", err)
+			}
 		}
-		r.Errors = errs
+		// Logs des Website-Stacks: <SITE_DIR>/logs. Ohne SITE_DIR oder ohne das Verzeichnis ist es kein Stack, kein Problem.
+		for _, e := range cfg.Env {
+			if dir, ok := strings.CutPrefix(e, "SITE_DIR="); ok && dir != "" {
+				logs := filepath.Join(dir, "logs")
+				if err := errs.addStack(logs); err != nil {
+					problem("Log nicht lesbar: %v", err)
+				}
+				t, err := ReadTraffic(logs, now, cfg.Window)
+				if err != nil {
+					problem("Zugriffe nicht ermittelbar: %v", err)
+				}
+				r.Site.Traffic = t
+			}
+		}
+		r.Errors = errs.list(cfg.MaxErrors)
 	}
 
 	if u, err := url.Parse(cfg.URL); err == nil && u.Scheme == "https" { // Parse normalisiert das Schema auf Kleinbuchstaben

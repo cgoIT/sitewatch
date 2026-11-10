@@ -14,6 +14,7 @@ import (
 
 	"sitewatch/internal/agentcfg"
 	"sitewatch/internal/jobs"
+	"sitewatch/internal/report"
 	"sitewatch/internal/sign"
 	"sitewatch/internal/store"
 )
@@ -395,5 +396,59 @@ func TestAgentPageSavesSiteActions(t *testing.T) {
 	}
 	if a, _ = srv.Agents.Get("server1"); len(a.Config.Sites[0].Actions) != 1 {
 		t.Errorf("Freigaben gingen verloren: %v", a.Config.Sites[0].Actions)
+	}
+}
+
+func TestHostActionsFromDetailPage(t *testing.T) {
+	srv, tok := setupJobs(t)
+	cfg := agentcfg.Remote{Sites: []agentcfg.Site{{ID: "srv", Name: "srv", Kind: "host", Actions: allActions("host")}}}
+	if err := srv.Agents.Save("server1", cfg, srv.Now()); err != nil {
+		t.Fatal(err)
+	}
+	rep := report.Report{Schema: 1, Agent: report.Agent{Type: "go-host"}, CollectedAt: srv.Now(), Site: report.Site{ID: "srv", Name: "srv", Kind: "host"},
+		Host: report.Host{Updates: &report.OSUpdates{Manager: "apt"}, Systemd: &report.Systemd{Failed: []string{"logrotate.service"}}}}
+	if w := post(srv, tok, rep); w.Code != http.StatusNoContent {
+		t.Fatalf("Ingest: %d %s", w.Code, w.Body.String())
+	}
+	// Ohne Meldung des Agenten bietet die Detailseite nichts an.
+	if body := do(srv, "GET", "/sites/srv", nil, nil).Body.String(); strings.Contains(body, `value="journal-unit"`) || strings.Contains(body, "action=apt-upgrade") {
+		t.Error("nicht angemeldete Aktionen dürfen nicht angeboten werden")
+	}
+	agentAnnounces(srv, tok, "apt-update,apt-upgrade,journal-unit")
+	body := do(srv, "GET", "/sites/srv", nil, nil).Body.String()
+	for _, want := range []string{`name="action" value="apt-update"`, "action=apt-upgrade", `name="arg" value="logrotate.service"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("Detailseite: %q fehlt", want)
+		}
+	}
+	if b := do(srv, "GET", "/jobs", nil, nil).Body.String(); !strings.Contains(b, `name="arg" value="logrotate.service"`) {
+		t.Error("Auftragsseite bietet das Journal der Unit nicht an")
+	}
+	// Die Unit kommt nie frei aus dem Formular: nur was der Report als fehlgeschlagen nennt.
+	for arg, code := range map[string]int{"": 400, "ssh.service": 409, "--file=/etc/shadow": 409} {
+		if w := do(srv, "POST", "/jobs", url.Values{"site": {"srv"}, "action": {"journal-unit"}, "arg": {arg}}, nil); w.Code != code {
+			t.Errorf("arg %q: %d", arg, w.Code)
+		}
+	}
+	if w := do(srv, "POST", "/jobs", url.Values{"site": {"srv"}, "action": {"apt-update"}, "arg": {"x.service"}}, nil); w.Code != 400 {
+		t.Errorf("Angabe bei Aktion ohne Angabe: %d", w.Code)
+	}
+	if w := do(srv, "POST", "/jobs", url.Values{"site": {"srv"}, "action": {"apt-upgrade"}}, nil); w.Code != 422 {
+		t.Errorf("apt-upgrade ohne Site-ID: %d", w.Code)
+	}
+	w := do(srv, "POST", "/jobs", url.Values{"site": {"srv"}, "action": {"journal-unit"}, "arg": {"logrotate.service"}}, nil)
+	if w.Code != http.StatusSeeOther {
+		t.Fatalf("Journal: %d %s", w.Code, w.Body.String())
+	}
+	if b := do(srv, "GET", w.Header().Get("Location"), nil, nil).Body.String(); !strings.Contains(b, "Journal der Unit logrotate.service") {
+		t.Error("Auftragsseite nennt die Unit nicht")
+	}
+	var got struct{ Jobs []sign.Envelope }
+	_ = json.Unmarshal(do(srv, "GET", "/api/v1/agent/jobs?wait=0", nil, bearer(tok)).Body.Bytes(), &got)
+	if len(got.Jobs) != 1 {
+		t.Fatal("Auftrag nicht ausgeliefert")
+	}
+	if p, err := sign.VerifyJob(srv.SignKey.Public().(ed25519.PublicKey), got.Jobs[0], "server1", srv.Now()); err != nil || p.Arg != "logrotate.service" {
+		t.Errorf("signierte Angabe: %+v %v", p, err)
 	}
 }

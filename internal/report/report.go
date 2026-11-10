@@ -45,6 +45,8 @@ type Host struct {
 	Network *Network   `json:"network,omitempty"`
 	Updates *OSUpdates `json:"os_updates,omitempty"`
 	Systemd *Systemd   `json:"systemd,omitempty"`
+	// SSHFailed: fehlgeschlagene SSH-Anmeldungen der letzten 24 Stunden laut Journal.
+	SSHFailed *int `json:"ssh_failed,omitempty"`
 }
 
 // OSInfo beschreibt Betriebssystem und Auslastung des Servers.
@@ -154,6 +156,7 @@ type Site struct {
 	CronLastRun       *time.Time `json:"cron_last_run,omitempty"`      // letzter Lauf eines Contao-Cron-Jobs; nil = unbekannt
 	PendingMigrations *int       `json:"pending_migrations,omitempty"` // offene Migrationen und Schema-Befehle; nil = unbekannt
 	PackagesTotal     int        `json:"packages_total"`
+	Traffic           *Traffic   `json:"traffic,omitempty"` // nil = kein Access-Log erfasst
 	Outdated          []Package  `json:"outdated"`
 	Advisories        []Advisory `json:"advisories"`
 	// Problems listet Dinge, die der Agent nicht ermitteln konnte.
@@ -218,7 +221,14 @@ type Advisory struct {
 	Link    string `json:"link,omitempty"`
 }
 
-// LogError ist eine gruppierte Fehlermeldung aus dem Log.
+// Traffic: Zugriffe laut nginx-Access-Log in den letzten 24 Stunden. Nur Summen, keine Adressen und keine Pfade.
+type Traffic struct {
+	Requests  int `json:"requests"`
+	Status4xx int `json:"status_4xx"`
+	Status5xx int `json:"status_5xx"`
+}
+
+// LogError ist eine gruppierte Fehlermeldung aus dem Log (Contao, PHP, nginx; bei Host-Einträgen der Kernel).
 type LogError struct {
 	Time    time.Time `json:"time"`
 	Level   string    `json:"level"`
@@ -281,6 +291,12 @@ func (r *Report) Validate(now time.Time) error {
 	}
 	if len(r.Errors) > 100 || len(r.Site.Outdated) > 1000 || len(r.Site.Advisories) > 200 || len(r.Site.Problems) > 50 {
 		return errors.New("zu viele Einträge im Report")
+	}
+	if t := r.Site.Traffic; t != nil && (badInt(&t.Requests) || badInt(&t.Status4xx) || badInt(&t.Status5xx)) {
+		return errors.New("Zugriffszahlen ungültig")
+	}
+	if badInt(r.Host.SSHFailed) {
+		return errors.New("ssh_failed ungültig")
 	}
 	for _, e := range r.Errors {
 		if len(e.Message) > 2000 {
