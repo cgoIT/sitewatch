@@ -98,8 +98,8 @@
       {{else}}<tr><td colspan="4" class="muted">Keine offenen Updates.</td></tr>{{end}}{{else}}<tr><td colspan="4" class="muted">Nicht erfasst (kein apt).</td></tr>{{end}}
       </tbody></table></div></section>
     <section class="card"><h2>Kernel-Meldungen <span class="muted" style="font-weight:400">· Fehler der letzten 24 Stunden, gruppiert</span></h2>
-      <div class="scroll"><table><thead><tr><th>Zeit</th><th>Meldung</th><th>Anzahl</th></tr></thead><tbody>
-      {{range .R.Errors}}<tr><td class="mono" data-label="Zeit">{{fmtTime .Time}}</td><td class="mono msg" style="font-size:13px" data-label="Meldung">{{.Message}}</td><td class="mono" data-label="Anzahl">{{.Count}}×</td></tr>
+      <div class="scroll"><table class="compact" style="min-width:0;font-size:12px"><thead><tr><th>Zeit</th><th>Meldung</th><th>Anzahl</th></tr></thead><tbody>
+      {{range .R.Errors}}<tr><td class="mono" data-label="Zeit">{{fmtTime .Time}}</td><td class="mono msg" data-label="Meldung">{{.Message}}</td><td class="mono" data-label="Anzahl">{{.Count}}×</td></tr>
       {{else}}<tr><td colspan="3" class="muted">Keine Fehler im Zeitfenster.</td></tr>{{end}}
       </tbody></table></div></section>
     <section class="card"><h2>Netzwerk</h2><div class="pad">{{with .R.Host.Network}}<dl class="kv">
@@ -140,8 +140,8 @@
       {{range .Ignored}}<tr><td class="mono" data-label="Paket">{{.Name}}</td><td class="mono" data-label="Installiert">{{.Installed}}</td><td class="mono" data-label="Verfügbar">{{.Latest}}</td><td data-label="Hinweis"><span class="badge off">{{.Label}}</span></td></tr>{{end}}
       </tbody></table></div></details></section>{{end}}
     <section class="card"><h2>Letzte Fehler <span class="muted" style="font-weight:400">· gruppiert, neueste zuerst</span></h2>
-      <div class="scroll"><table><thead><tr><th>Zeit</th><th>Quelle/Level</th><th>Meldung</th><th>Anzahl</th></tr></thead><tbody>
-      {{range .R.Errors}}<tr><td class="mono" data-label="Zeit">{{fmtTime .Time}}</td><td style="font-weight:500" data-label="Level">{{.Level}}</td><td class="mono msg" style="font-size:13px" data-label="Meldung">{{.Message}}</td><td class="mono" data-label="Anzahl">{{.Count}}×</td></tr>
+      <div class="scroll"><table class="compact" style="min-width:0;font-size:12px"><thead><tr><th>Zeit</th><th>Quelle/Level</th><th>Meldung</th><th>Anzahl</th></tr></thead><tbody>
+      {{range .R.Errors}}<tr><td class="mono" data-label="Zeit">{{fmtTime .Time}}</td><td style="font-weight:500;white-space:nowrap" data-label="Quelle/Level">{{.Level}}</td><td class="mono msg" data-label="Meldung">{{.Message}}</td><td class="mono" data-label="Anzahl">{{.Count}}×</td></tr>
       {{else}}<tr><td colspan="4" class="muted">Keine Fehler im Zeitfenster.</td></tr>{{end}}
       </tbody></table></div></section>
     {{end}}

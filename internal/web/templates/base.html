@@ -24,6 +24,7 @@ table{border-collapse:collapse;width:100%;min-width:760px}
 th{background:var(--bg);color:var(--muted);font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:.04em;text-align:left;padding:12px 20px}
 td{padding:14px 20px;border-top:1px solid #E6E9ED;vertical-align:baseline}
 td.mono{white-space:nowrap}
+td.msg{white-space:normal;overflow-wrap:anywhere} /* lange Meldungen brechen um, statt die Tabelle scrollen zu lassen */
 :where(table.compact) th,:where(table.compact) td{padding-left:12px;padding-right:12px} /* schmale Karte: sonst läuft die Tabelle über und scrollt */
 .mono{font-family:"IBM Plex Mono",ui-monospace,monospace}
 .sub{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px;color:var(--muted)}
