@@ -29,7 +29,12 @@ func collectHostInfo(ctx context.Context, cfg Config, r *report.Report, now time
 		case err != nil || code != 0:
 			problem("apt list fehlgeschlagen: %s", firstLine(se))
 		default:
-			r.Host.Updates = ParseAptUpgradable(out)
+			// Was apt wegen Phasing zurückstellt, würde ein Upgrade nicht einspielen: nicht als offen zählen. Die Simulation ändert nichts.
+			sim, se, code, err := runEnv(ctx, []string{"LC_ALL=C"}, cfg.Path, "apt-get", "-s", "--with-new-pkgs", "upgrade")
+			if err != nil || code != 0 {
+				problem("apt-get -s upgrade fehlgeschlagen (zurückgestellte Updates zählen mit): %s", firstLine(se))
+			}
+			r.Host.Updates = ParseAptUpgradable(out, ParseAptDeferred(sim))
 			if st, err := os.Stat("/var/lib/apt/periodic/update-success-stamp"); err == nil && now.Sub(st.ModTime()) > 3*24*time.Hour {
 				problem("apt-Paketlisten sind %d Tage alt (apt update läuft nicht regelmäßig); die Update-Zahl kann zu niedrig sein", int(now.Sub(st.ModTime()).Hours()/24))
 			}
@@ -190,13 +195,14 @@ func ParseResolv(data string) []string {
 }
 
 // ParseAptUpgradable liest "apt list --upgradable". Sicherheitsupdates erkennt man an einer Quelle mit "-security" im Namen.
-// shortcut: keine Unterscheidung nach Priorität oder zurückgehaltenen Paketen; die Liste ist auf 500 Einträge gekürzt (Total zählt alle).
-func ParseAptUpgradable(data string) *report.OSUpdates {
+// Pakete in deferred (siehe ParseAptDeferred) fehlen in Liste und Zahl.
+// shortcut: keine Unterscheidung nach Priorität oder mit apt-mark zurückgehaltenen Paketen; die Liste ist auf 500 Einträge gekürzt (Total zählt alle).
+func ParseAptUpgradable(data string, deferred map[string]bool) *report.OSUpdates {
 	u := &report.OSUpdates{Manager: "apt"}
 	for _, l := range strings.Split(data, "\n") {
 		name, rest, ok := strings.Cut(l, "/")
-		if !ok || strings.ContainsAny(name, " \t") {
-			continue // "Listing..." und Warnungen
+		if !ok || strings.ContainsAny(name, " \t") || deferred[name] {
+			continue // "Listing...", Warnungen und zurückgestellte Pakete
 		}
 		f := strings.Fields(rest)
 		if len(f) < 3 {
@@ -217,6 +223,22 @@ func ParseAptUpgradable(data string) *report.OSUpdates {
 	// Sicherheitsupdates zuerst
 	sort.SliceStable(u.Packages, func(i, j int) bool { return u.Packages[i].Security && !u.Packages[j].Security })
 	return u
+}
+
+// ParseAptDeferred liest aus "apt-get -s upgrade" die Pakete, die apt wegen Phasing (gestaffelte Auslieferung) zurückstellt:
+// der eingerückte Block nach "The following upgrades have been deferred due to phasing:".
+func ParseAptDeferred(sim string) map[string]bool {
+	out := map[string]bool{}
+	_, rest, _ := strings.Cut(sim, "deferred due to phasing:\n")
+	for _, l := range strings.Split(rest, "\n") {
+		if !strings.HasPrefix(l, " ") {
+			break
+		}
+		for _, name := range strings.Fields(l) {
+			out[name] = true
+		}
+	}
+	return out
 }
 
 // ParseFailedUnits liest "systemctl list-units --state=failed --plain --no-legend".

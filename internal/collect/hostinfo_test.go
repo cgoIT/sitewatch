@@ -10,14 +10,26 @@ func TestParseAptUpgradable(t *testing.T) {
 		"curl/stable-security 7.88.1-10+deb12u5 amd64 [upgradable from: 7.88.1-10+deb12u4]\n" +
 		"vim/stable 2:9.0.1378-2 amd64 [upgradable from: 2:9.0.1378-1]\n" +
 		"WARNING: apt does not have a stable CLI interface. Use with caution in scripts.\n"
-	u := ParseAptUpgradable(in)
+	u := ParseAptUpgradable(in, nil)
 	if u.Total != 2 || u.Security != 1 || len(u.Packages) != 2 {
 		t.Fatalf("Zahlen: %+v", u)
 	}
 	if p := u.Packages[0]; p.Name != "curl" || !p.Security || p.New != "7.88.1-10+deb12u5" || p.Installed != "7.88.1-10+deb12u4" {
 		t.Errorf("curl: %+v", p)
 	}
-	if e := ParseAptUpgradable("Listing...\n"); e.Total != 0 || e.Manager != "apt" {
+	// Ausgabe von "apt-get -s upgrade" (Beispieldaten): zurückgestellte Pakete zählen nicht.
+	sim := "Reading package lists...\nCalculating upgrade...\nThe following upgrades have been deferred due to phasing:\n" +
+		"  distro-info python3-distro-info\n  vim\n0 upgraded, 0 newly installed, 0 to remove and 3 not upgraded.\n"
+	if d := ParseAptDeferred(sim); len(d) != 3 || !d["vim"] || !d["python3-distro-info"] {
+		t.Errorf("zurückgestellt: %v", d)
+	}
+	if u := ParseAptUpgradable(in, ParseAptDeferred(sim)); u.Total != 1 || u.Packages[0].Name != "curl" {
+		t.Errorf("mit Phasing: %+v", u)
+	}
+	if d := ParseAptDeferred("Reading package lists...\n0 upgraded, 0 newly installed.\n"); len(d) != 0 {
+		t.Errorf("ohne Phasing: %v", d)
+	}
+	if e := ParseAptUpgradable("Listing...\n", nil); e.Total != 0 || e.Manager != "apt" {
 		t.Errorf("leer: %+v", e)
 	}
 }

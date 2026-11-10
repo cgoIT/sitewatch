@@ -188,7 +188,8 @@ Ein `host`-Eintrag hat eine eigene Detailseite und in der Übersicht eine eigene
   Steht der Neustart länger aus als „Ausstehender Neustart: Warnung nach“ (Einstellungen, Standard 7 Tage), warnt Sitewatch.
 - **Netzwerk:** aktive Schnittstellen mit Adressen und MAC, IPv4-Standardroute, DNS-Server. Docker-/veth-/Bridge-Schnittstellen und
   link-lokale Adressen blendet der Agent aus. Die Angaben liegen in der Datenbank von Sitewatch (hinter dem Login).
-- **Betriebssystem-Updates:** `apt list --upgradable` (ohne Netzzugriff, aus den lokalen Paketlisten). Sicherheitsupdates (Quelle mit
+- **Betriebssystem-Updates:** `apt list --upgradable` (ohne Netzzugriff, aus den lokalen Paketlisten). Pakete, die apt wegen Phasing
+  zurückstellt (laut `apt-get -s upgrade`), zählen nicht mit: ein Upgrade würde sie nicht einspielen. Sicherheitsupdates (Quelle mit
   `-security`) sind eine Warnung, normale Updates werden nur gezählt. Sind die Paketlisten älter als 3 Tage, steht ein Hinweis unter
   „Nicht ermittelt“, weil die Zahl dann zu niedrig sein kann. Ohne `apt` bleibt der Bereich leer.
 - **Systemdienste:** `systemctl list-units --state=failed`; jede fehlgeschlagene Unit ist eine Warnung. Ohne systemd bleibt der Bereich leer.
