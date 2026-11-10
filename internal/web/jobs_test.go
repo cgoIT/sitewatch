@@ -452,3 +452,22 @@ func TestHostActionsFromDetailPage(t *testing.T) {
 		t.Errorf("signierte Angabe: %+v %v", p, err)
 	}
 }
+
+func TestAgentPageSavesIgnoredUserAgents(t *testing.T) {
+	srv, _ := setupJobs(t)
+	form := url.Values{"count": {"1"}, "s0_id": {"cgo"}, "s0_kind": {"contao"}, "s0_path": {"/srv/cgo"}, "ignore_ua": {" Kuma \r\n\r\nmonitor/1.0"}}
+	if w := do(srv, "POST", "/agents/server1", form, nil); w.Code != http.StatusSeeOther {
+		t.Fatalf("speichern: %d %s", w.Code, w.Body.String())
+	}
+	a, _ := srv.Agents.Get("server1")
+	if got := strings.Join(a.Config.IgnoreUserAgents, "|"); got != "Kuma|monitor/1.0" {
+		t.Errorf("gespeichert: %q", got)
+	}
+	if w := do(srv, "GET", "/agents/server1", nil, nil); !strings.Contains(w.Body.String(), "Kuma\nmonitor/1.0</textarea>") {
+		t.Error("Formular zeigt die Liste nicht")
+	}
+	form.Set("ignore_ua", strings.Repeat("x", 101))
+	if w := do(srv, "POST", "/agents/server1", form, nil); w.Code == http.StatusSeeOther {
+		t.Error("zu langer Eintrag muss abgelehnt werden")
+	}
+}

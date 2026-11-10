@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	"sitewatch/internal/jobs"
 	"sitewatch/internal/report"
@@ -52,17 +53,33 @@ type file struct {
 	MariaDB   string `json:"mariadb"`  // Programm für `mariadb --version` (nicht für kind=host)
 	Smartctl  string `json:"smartctl"` // Programm für die SMART-Abfrage, leer = smartctl im PATH
 	Sites     []Site `json:"sites"`
+	// IgnoreUserAgents: Teilstrings von User-Agents, deren Anfragen nicht als Zugriff zählen (eigene Monitore).
+	IgnoreUserAgents []string `json:"ignore_user_agents"`
+}
+
+// checkUserAgents begrenzt die Liste: wenige, kurze Einträge ohne Steuerzeichen.
+func checkUserAgents(list []string) error {
+	if len(list) > 20 {
+		return errors.New("ignore_user_agents: höchstens 20 Einträge")
+	}
+	for _, s := range list {
+		if s == "" || len(s) > 100 || strings.ContainsFunc(s, unicode.IsControl) {
+			return fmt.Errorf("ignore_user_agents: %q ungültig (1 bis 100 Zeichen, keine Steuerzeichen)", s)
+		}
+	}
+	return nil
 }
 
 // Config ist die geprüfte Konfiguration. Die Tokens der Sites sind bereits aufgelöst.
 type Config struct {
-	Sitewatch      string
-	Interval       time.Duration
-	Spool          string
-	Composer, PHP  string
-	Nginx, MariaDB string
-	Smartctl       string
-	Sites          []Site
+	Sitewatch        string
+	Interval         time.Duration
+	Spool            string
+	Composer, PHP    string
+	Nginx, MariaDB   string
+	Smartctl         string
+	Sites            []Site
+	IgnoreUserAgents []string
 }
 
 // MinInterval verhindert, dass ein Tippfehler Sitewatch überflutet.
@@ -83,7 +100,10 @@ func Load(path string) (Config, error) {
 	if dec.More() {
 		return Config{}, fmt.Errorf("%s: unerwartete Daten nach dem JSON-Dokument", path)
 	}
-	c := Config{Sitewatch: f.Sitewatch, Spool: f.Spool, Composer: f.Composer, PHP: f.PHP, Nginx: f.Nginx, MariaDB: f.MariaDB, Smartctl: f.Smartctl, Sites: f.Sites, Interval: 5 * time.Minute}
+	c := Config{Sitewatch: f.Sitewatch, Spool: f.Spool, Composer: f.Composer, PHP: f.PHP, Nginx: f.Nginx, MariaDB: f.MariaDB, Smartctl: f.Smartctl, Sites: f.Sites, Interval: 5 * time.Minute, IgnoreUserAgents: f.IgnoreUserAgents}
+	if err := checkUserAgents(c.IgnoreUserAgents); err != nil {
+		return Config{}, err
+	}
 	if err := CheckSitewatchURL(c.Sitewatch); err != nil {
 		return Config{}, err
 	}

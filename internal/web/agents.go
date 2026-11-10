@@ -268,7 +268,7 @@ func (s *Server) editPage(w http.ResponseWriter, a agents.Agent, cfg agentcfg.Re
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(code)
 	preview, _ := json.MarshalIndent(a.Config, "", "  ") // der gespeicherte Stand, nicht die ungespeicherten Eingaben
-	s.render(w, "agent.html", map[string]any{"Preview": string(preview), "TTLDays": int(sign.TTL.Hours() / 24), "Now": s.Now(), "Expires": s.Now().Add(sign.TTL), "Agent": a, "Interval": cfg.Interval, "Sites": forms, "Count": len(forms),
+	s.render(w, "agent.html", map[string]any{"Preview": string(preview), "TTLDays": int(sign.TTL.Hours() / 24), "Now": s.Now(), "Expires": s.Now().Add(sign.TTL), "Agent": a, "Interval": cfg.Interval, "IgnoreUA": strings.Join(cfg.IgnoreUserAgents, "\n"), "Sites": forms, "Count": len(forms),
 		"Error": msg, "Fetched": s.fetchedText(a.ID), "Channel": s.channelText(a.ID), "Nonce": nonce})
 }
 
@@ -298,6 +298,11 @@ const maxSiteRows = 50
 // parseSites liest die Zeilen s<n>_… des Formulars; Zeilen mit „löschen“ oder ganz ohne ID fallen weg.
 func parseSites(r *http.Request) agentcfg.Remote {
 	cfg := agentcfg.Remote{Interval: strings.TrimSpace(r.FormValue("interval"))}
+	for _, l := range strings.Split(r.FormValue("ignore_ua"), "\n") {
+		if l = strings.TrimSpace(l); l != "" {
+			cfg.IgnoreUserAgents = append(cfg.IgnoreUserAgents, l)
+		}
+	}
 	n, _ := strconv.Atoi(r.FormValue("count"))
 	for i := 0; i < min(n, maxSiteRows); i++ {
 		f := func(k string) string { return strings.TrimSpace(r.FormValue(fmt.Sprintf("s%d_%s", i, k))) }

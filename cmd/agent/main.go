@@ -154,6 +154,7 @@ func jobsFrom(c agentcfg.Config) []job {
 			Nginx: ng, MariaDB: db, NoNginx: s.Nginx != nil && !*s.Nginx, NoMariaDB: s.MariaDB != nil && !*s.MariaDB,
 			Smartctl: absIfPath(c.Smartctl), NoSMART: s.SMART != nil && !*s.SMART,
 			Host: s.Host, BackupDir: s.BackupDir, BackupGlob: s.BackupGlob, Env: s.EnvList(), IgnoreUpdates: s.IgnoreUpdates,
+			IgnoreUserAgents: c.IgnoreUserAgents,
 		}}
 		if c.Spool != "" {
 			j.spool = filepath.Join(c.Spool, s.ID)

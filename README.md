@@ -13,7 +13,9 @@ Was das Dashboard zeigt (je Site und für den Server):
 - mit dem Website-Stack (Feld `SITE_DIR`): Fehler aus `logs/nginx/error.log`, `logs/php/error.log` und `logs/php/fpm-error.log`
   (nur `error` und höher bzw. PHP Fatal/Parse error; die Sperrregel „access forbidden by rule“ zählt nicht) sowie die Zugriffe der
   letzten 24 Stunden aus `logs/nginx/access.log` als Summen (Anfragen, 4xx, 5xx; ohne Anfragen vom Server selbst). Adressen und Pfade
-  der Besucher verlassen den Server nicht.
+  der Besucher verlassen den Server nicht. Eigene Monitore (z. B. Uptime Kuma) schließt man auf der Agentenseite über ihren User-Agent
+  aus (`ignore_user_agents`). Sitewatch warnt, wenn die 5xx-Antworten Anzahl *und* Anteil aus den Einstellungen erreichen
+  (Standard: 20 und 1 %).
 - freier Speicherplatz, Alter des letzten Backups, Ablauf des TLS-Zertifikats, Wartungsmodus
 - SMART-Zustand der Platten (nur `host`-Einträge, über `smartctl` aus smartmontools; der Agent braucht Leserechte auf die Geräte, i. d. R. Root): Gesamturteil „failed“ ist kritisch, defekte/umgelagerte Sektoren sind eine Warnung. Fehlt `smartctl`, erscheint ein Problem („Teilweise keine Daten“); auf VMs ohne echte Platten schaltet man die Abfrage je Site ab (siehe „SMART und RAID“ unten)
 - Linux-Software-RAID (mdadm, aus `/proc/mdstat`, nur `host`-Einträge): ein degradierter oder inaktiver Verbund ist kritisch, ein als defekt markiertes Mitglied bei vollständigem Verbund eine Warnung. Hardware-RAID-Controller und ZFS/btrfs sind nicht abgedeckt (einzelne Platten hinter einem Controller nur, wenn `smartctl --scan` sie liefert)

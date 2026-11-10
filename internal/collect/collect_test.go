@@ -374,18 +374,21 @@ Stack trace:
 	line := func(at time.Time, status int, addr, ua string) string {
 		return fmt.Sprintf(`{"log_type":"access","time":%q,"remote_addr":%q,"request":"GET / HTTP/1.1","status":%d,"user_agent":%q,"request_time":0.103}`+"\n", at.Format(time.RFC3339), addr, status, ua)
 	}
-	if tr, err := ReadTraffic(logs, now, 24*time.Hour); tr != nil || err != nil {
+	if tr, err := ReadTraffic(logs, now, 24*time.Hour, nil); tr != nil || err != nil {
 		t.Errorf("ohne Access-Log: %+v %v", tr, err)
 	}
 	write("nginx/access.log", line(now.Add(-time.Hour), 200, "192.0.2.1", "Mozilla/5.0 \"x\"")+line(now.Add(-2*time.Hour), 404, "192.0.2.1", "bot")+
 		line(now.Add(-3*time.Hour), 502, "192.0.2.1", "bot")+line(now.Add(-time.Hour), 200, "127.0.0.1", "curl/8.22.0")+line(now.Add(-time.Hour), 200, "192.0.2.9", "Sitewatch-Uptime")+"kaputt\n")
 	write("nginx/backup/access.log.1", line(now.Add(-20*time.Hour), 200, "192.0.2.1", "x")+line(now.Add(-30*time.Hour), 200, "192.0.2.1", "x"))
-	tr, err := ReadTraffic(logs, now, 24*time.Hour)
+	tr, err := ReadTraffic(logs, now, 24*time.Hour, nil)
 	if err != nil || tr == nil || *tr != (report.Traffic{Requests: 4, Status4xx: 1, Status5xx: 1}) {
 		t.Errorf("Zugriffe: %+v %v", tr, err)
 	}
+	if tr, _ := ReadTraffic(logs, now, 24*time.Hour, []string{"Kuma", "bot"}); tr == nil || tr.Requests != 2 || tr.Status4xx != 0 {
+		t.Errorf("ausgeschlossene User-Agents zählen mit: %+v", tr)
+	}
 	write("nginx/access.log", `192.0.2.1 - - [10/Nov/2026:00:03:55 +0100] "GET / HTTP/1.1" 200 14`+"\n")
-	if _, err := ReadTraffic(logs, now, 24*time.Hour); err == nil {
+	if _, err := ReadTraffic(logs, now, 24*time.Hour, nil); err == nil {
 		t.Error("unbekanntes Format muss ein Fehler sein, keine Null")
 	}
 }

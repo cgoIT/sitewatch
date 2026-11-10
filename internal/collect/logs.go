@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -176,10 +177,11 @@ type accessLine struct {
 }
 
 // ReadTraffic zählt die Zugriffe der letzten window im nginx-Access-Log des Website-Stacks (eine JSON-Zeile je Anfrage). Nur Summen.
-// Nicht gezählt: Anfragen vom Server selbst (FPM-Ping, Cron-Aufruf) und die Erreichbarkeitsprüfung von Sitewatch.
+// Nicht gezählt: Anfragen vom Server selbst (FPM-Ping, Cron-Aufruf), die Erreichbarkeitsprüfung von Sitewatch und
+// User-Agents, die einen Eintrag aus ignoreUA enthalten (eigene Monitore).
 // nil ohne Fehler = kein Access-Log vorhanden.
 // shortcut: liest die Dateien des Zeitfensters jedes Mal ganz (heute + gestern); bei sehr großen Logs die Startposition per Bisektion suchen.
-func ReadTraffic(logs string, now time.Time, window time.Duration) (*report.Traffic, error) {
+func ReadTraffic(logs string, now time.Time, window time.Duration, ignoreUA []string) (*report.Traffic, error) {
 	since := now.Add(-window)
 	var t *report.Traffic
 	for _, name := range []string{filepath.Join(logs, "nginx", "access.log"), filepath.Join(logs, "nginx", "backup", "access.log.1")} {
@@ -208,7 +210,8 @@ func ReadTraffic(logs string, now time.Time, window time.Duration) (*report.Traf
 				continue
 			}
 			parsed++
-			if l.Time.Before(since) || l.Time.After(now.Add(5*time.Minute)) || l.RemoteAddr == "127.0.0.1" || l.RemoteAddr == "::1" || l.UserAgent == "Sitewatch-Uptime" {
+			if l.Time.Before(since) || l.Time.After(now.Add(5*time.Minute)) || l.RemoteAddr == "127.0.0.1" || l.RemoteAddr == "::1" || l.UserAgent == "Sitewatch-Uptime" ||
+				slices.ContainsFunc(ignoreUA, func(s string) bool { return strings.Contains(l.UserAgent, s) }) {
 				continue
 			}
 			t.Requests++

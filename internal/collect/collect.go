@@ -23,28 +23,29 @@ import (
 
 // Config steuert die Datensammlung für eine Site.
 type Config struct {
-	SiteID         string
-	Name           string
-	Kind           string // "contao", "php" oder "host" (nur Servermesswerte, kein PHP/Composer)
-	URL            string
-	Path           string // Projektverzeichnis der Site (enthält composer.lock, var/logs)
-	Composer       string // Pfad zum composer-Binary
-	PHP            string // Pfad zum php-Binary
-	AgentVersion   string
-	Window         time.Duration // Zeitfenster für Fehler aus dem Log
-	MaxErrors      int
-	BackupDir      string   // optional: Verzeichnis, in das die Backups geschrieben werden
-	BackupGlob     string   // Dateimaske für Backups (filepath.Match), leer = alle Dateien
-	IgnoreUpdates  []string // Regeln "paket-glob" oder "paket-glob:versions-glob" (z. B. "contao/*:6.*"); Treffer zählen nicht als offene Updates
-	Nginx, MariaDB string   // optional: Programme für `nginx -v` / `mariadb --version`, z. B. Docker-Wrapper; leer = auf dem Host suchen
-	Smartctl       string   // optional: Pfad zu smartctl, leer = auf dem Host suchen
-	NoNginx        bool     // Site hat keinen nginx bzw. keine DB: nicht suchen, kein Problem melden
-	NoMariaDB      bool
-	NoSMART        bool     // keine SMART-Abfrage (VM ohne echte Platten)
-	NoHostInfo     bool     // keine OS-, Netzwerk-, apt- und systemd-Abfrage (Tests)
-	Host           bool     // freien Speicher erfassen und nginx/MariaDB auf dem Server suchen (konfigurierte Wrapper in Nginx/MariaDB gelten auch ohne)
-	Env            []string // zusätzliche Umgebung (KEY=wert) für composer/php, z. B. SITE_DIR für die Docker-Wrapper
-	Now            func() time.Time
+	SiteID           string
+	Name             string
+	Kind             string // "contao", "php" oder "host" (nur Servermesswerte, kein PHP/Composer)
+	URL              string
+	Path             string // Projektverzeichnis der Site (enthält composer.lock, var/logs)
+	Composer         string // Pfad zum composer-Binary
+	PHP              string // Pfad zum php-Binary
+	AgentVersion     string
+	Window           time.Duration // Zeitfenster für Fehler aus dem Log
+	MaxErrors        int
+	BackupDir        string   // optional: Verzeichnis, in das die Backups geschrieben werden
+	BackupGlob       string   // Dateimaske für Backups (filepath.Match), leer = alle Dateien
+	IgnoreUpdates    []string // Regeln "paket-glob" oder "paket-glob:versions-glob" (z. B. "contao/*:6.*"); Treffer zählen nicht als offene Updates
+	Nginx, MariaDB   string   // optional: Programme für `nginx -v` / `mariadb --version`, z. B. Docker-Wrapper; leer = auf dem Host suchen
+	IgnoreUserAgents []string // Teilstrings von User-Agents, die nicht als Zugriff zählen
+	Smartctl         string   // optional: Pfad zu smartctl, leer = auf dem Host suchen
+	NoNginx          bool     // Site hat keinen nginx bzw. keine DB: nicht suchen, kein Problem melden
+	NoMariaDB        bool
+	NoSMART          bool     // keine SMART-Abfrage (VM ohne echte Platten)
+	NoHostInfo       bool     // keine OS-, Netzwerk-, apt- und systemd-Abfrage (Tests)
+	Host             bool     // freien Speicher erfassen und nginx/MariaDB auf dem Server suchen (konfigurierte Wrapper in Nginx/MariaDB gelten auch ohne)
+	Env              []string // zusätzliche Umgebung (KEY=wert) für composer/php, z. B. SITE_DIR für die Docker-Wrapper
+	Now              func() time.Time
 }
 
 // Collect erzeugt einen Report. Einzelne fehlgeschlagene Quellen führen nicht zum
@@ -123,7 +124,7 @@ func Collect(ctx context.Context, cfg Config) (report.Report, error) {
 				if err := errs.addStack(logs); err != nil {
 					problem("Log nicht lesbar: %v", err)
 				}
-				t, err := ReadTraffic(logs, now, cfg.Window)
+				t, err := ReadTraffic(logs, now, cfg.Window, cfg.IgnoreUserAgents)
 				if err != nil {
 					problem("Zugriffe nicht ermittelbar: %v", err)
 				}

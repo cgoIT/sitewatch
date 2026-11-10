@@ -18,8 +18,9 @@ import (
 // Programme (php, composer, nginx, mariadb), Token und Zwischenspeicher bleiben lokal im Bootstrap:
 // wer Sitewatch (oder dessen Signaturschlüssel) in der Hand hat, soll dem Agenten keine Programme unterschieben können.
 type Remote struct {
-	Interval string `json:"interval,omitempty"`
-	Sites    []Site `json:"sites"`
+	Interval         string   `json:"interval,omitempty"`
+	IgnoreUserAgents []string `json:"ignore_user_agents,omitempty"` // siehe file.IgnoreUserAgents
+	Sites            []Site   `json:"sites"`
 }
 
 // Validate prüft die Remote-Konfiguration. roots (absolute Verzeichnisse, nur beim Agenten bekannt): alle Pfade müssen darunter liegen;
@@ -29,6 +30,9 @@ func (r Remote) Validate(roots []string) error {
 		if d, err := time.ParseDuration(r.Interval); err != nil || d < MinInterval {
 			return fmt.Errorf("interval %q ungültig (mindestens %s)", r.Interval, MinInterval)
 		}
+	}
+	if err := checkUserAgents(r.IgnoreUserAgents); err != nil {
+		return err
 	}
 	seen := map[string]bool{}
 	for i, s := range r.Sites {
@@ -152,7 +156,7 @@ func LoadBootstrap(path string) (Bootstrap, error) {
 // Config macht aus der Fernkonfiguration die Konfiguration des Agenten; alle Sites melden mit dem Token des Agenten.
 func (b Bootstrap) Config(r Remote) Config {
 	c := Config{Sitewatch: b.Sitewatch, Interval: 5 * time.Minute, Spool: filepath.Join(b.State, "spool"),
-		Composer: b.Composer, PHP: b.PHP, Nginx: b.Nginx, MariaDB: b.MariaDB, Smartctl: b.Smartctl, Sites: append([]Site(nil), r.Sites...)}
+		Composer: b.Composer, PHP: b.PHP, Nginx: b.Nginx, MariaDB: b.MariaDB, Smartctl: b.Smartctl, Sites: append([]Site(nil), r.Sites...), IgnoreUserAgents: r.IgnoreUserAgents}
 	if d, err := time.ParseDuration(r.Interval); err == nil && d >= MinInterval {
 		c.Interval = d
 	}

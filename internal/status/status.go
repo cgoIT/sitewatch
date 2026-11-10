@@ -38,32 +38,34 @@ type Config struct {
 	BundleStaleAfter time.Duration
 	// BundlePingAfter: ist der Report eines Contao-Bundles so alt, ruft Sitewatch die Seite einmal auf (Weckruf für den Contao-Cron).
 	BundlePingAfter time.Duration
-	ErrorWarn       int             // ab so vielen Fehlern im Fenster = Warnung
-	EOLWarn         time.Duration   // Warnung, wenn das PHP-Support-Ende näher als das ist
-	TLSWarn         time.Duration   // Warnung, wenn das Zertifikat in weniger als dieser Zeit abläuft
-	BackupMax       time.Duration   // Warnung, wenn das letzte Backup älter ist
-	DiskWarn        int             // Warnung, wenn weniger als so viel Prozent Speicher frei sind
-	DiskCrit        int             // kritisch, wenn weniger als so viel Prozent frei sind
-	DiskWearWarn    int             // NVMe: Warnung ab so viel Prozent Verschleiß (percentage_used)
-	DiskWearCrit    int             // NVMe: kritisch ab so viel Prozent Verschleiß
-	DiskSpareWarn   int             // NVMe: Warnung, wenn weniger als so viel Prozent Reserve (available_spare) übrig sind
-	CronWarn        time.Duration   // Warnung, wenn der letzte Contao-Cron-Lauf länger her ist
-	CronCrit        time.Duration   // kritisch, wenn er noch länger her ist
-	RebootWarn      time.Duration   // Warnung, wenn ein Neustart des Servers (reboot-required) so lange aussteht
-	MaintWarn       time.Duration   // Warnung, wenn der Wartungsmodus so lange an ist
-	MaintCrit       time.Duration   // kritisch, wenn er noch länger an ist (vergessen)
-	Retention       store.Retention // Aufbewahrung des Verlaufs und der Tagesstände (siehe store)
-	UptimeFails     int             // so viele Fehlschläge in Folge: Seite gilt als nicht erreichbar (kritisch)
-	LatencyWarn     time.Duration   // Warnung, wenn die Antwortzeit (Median der letzten Prüfungen) darüber liegt
-	UptimeWarnPct   int             // Anzeige: Erreichbarkeit der letzten 30 Tage darunter wird markiert (wirkt nicht auf den Status)
-	Uptime          UptimeSource    // optional: Erreichbarkeitsprüfung von Sitewatch aus; nil = keine
-	DiskAcks        DiskAckSource   // optional: zur Kenntnis genommene defekte Sektoren; nil = jede Platte mit defekten Sektoren warnt
-	EOL             EOLSource       // optional: aktuelle Support-Enden (z. B. endoflife.date); nil = nur die eingebaute PHP-Tabelle
+	ErrorWarn       int // ab so vielen Fehlern im Fenster = Warnung
+	// Antworten mit 5xx laut Access-Log: Warnung erst, wenn beide Schwellen erreicht sind (Anzahl und Anteil an den Zugriffen).
+	HTTP5xxWarn, HTTP5xxPct int
+	EOLWarn                 time.Duration   // Warnung, wenn das PHP-Support-Ende näher als das ist
+	TLSWarn                 time.Duration   // Warnung, wenn das Zertifikat in weniger als dieser Zeit abläuft
+	BackupMax               time.Duration   // Warnung, wenn das letzte Backup älter ist
+	DiskWarn                int             // Warnung, wenn weniger als so viel Prozent Speicher frei sind
+	DiskCrit                int             // kritisch, wenn weniger als so viel Prozent frei sind
+	DiskWearWarn            int             // NVMe: Warnung ab so viel Prozent Verschleiß (percentage_used)
+	DiskWearCrit            int             // NVMe: kritisch ab so viel Prozent Verschleiß
+	DiskSpareWarn           int             // NVMe: Warnung, wenn weniger als so viel Prozent Reserve (available_spare) übrig sind
+	CronWarn                time.Duration   // Warnung, wenn der letzte Contao-Cron-Lauf länger her ist
+	CronCrit                time.Duration   // kritisch, wenn er noch länger her ist
+	RebootWarn              time.Duration   // Warnung, wenn ein Neustart des Servers (reboot-required) so lange aussteht
+	MaintWarn               time.Duration   // Warnung, wenn der Wartungsmodus so lange an ist
+	MaintCrit               time.Duration   // kritisch, wenn er noch länger an ist (vergessen)
+	Retention               store.Retention // Aufbewahrung des Verlaufs und der Tagesstände (siehe store)
+	UptimeFails             int             // so viele Fehlschläge in Folge: Seite gilt als nicht erreichbar (kritisch)
+	LatencyWarn             time.Duration   // Warnung, wenn die Antwortzeit (Median der letzten Prüfungen) darüber liegt
+	UptimeWarnPct           int             // Anzeige: Erreichbarkeit der letzten 30 Tage darunter wird markiert (wirkt nicht auf den Status)
+	Uptime                  UptimeSource    // optional: Erreichbarkeitsprüfung von Sitewatch aus; nil = keine
+	DiskAcks                DiskAckSource   // optional: zur Kenntnis genommene defekte Sektoren; nil = jede Platte mit defekten Sektoren warnt
+	EOL                     EOLSource       // optional: aktuelle Support-Enden (z. B. endoflife.date); nil = nur die eingebaute PHP-Tabelle
 }
 
 // DefaultConfig liefert die Standardwerte aller Schwellwerte. Im Betrieb kommen Abweichungen aus der Datenbank (Seite „Einstellungen“).
 func DefaultConfig() Config {
-	return Config{StaleAfter: 15 * time.Minute, BundleStaleAfter: 3 * time.Hour, BundlePingAfter: 90 * time.Minute, ErrorWarn: 10, EOLWarn: 90 * 24 * time.Hour,
+	return Config{StaleAfter: 15 * time.Minute, BundleStaleAfter: 3 * time.Hour, BundlePingAfter: 90 * time.Minute, ErrorWarn: 10, HTTP5xxWarn: 20, HTTP5xxPct: 1, EOLWarn: 90 * 24 * time.Hour,
 		TLSWarn: 14 * 24 * time.Hour, BackupMax: 36 * time.Hour, DiskWarn: 15, DiskCrit: 5, DiskWearWarn: 80, DiskWearCrit: 100, DiskSpareWarn: 50, CronWarn: 2 * time.Hour, CronCrit: 4 * time.Hour, MaintWarn: 2 * time.Hour, RebootWarn: 7 * 24 * time.Hour, MaintCrit: 8 * time.Hour,
 		UptimeFails: 3, LatencyWarn: 2 * time.Second, UptimeWarnPct: 99, Retention: store.DefaultRetention()}
 }
@@ -216,6 +218,9 @@ func Evaluate(r *report.Report, receivedAt, now time.Time, cfg Config) Result {
 	}
 	if total >= cfg.ErrorWarn {
 		raise(Warn, "%d Fehler in den letzten 24 Stunden", total)
+	}
+	if t := r.Site.Traffic; t != nil && t.Status5xx > 0 && t.Status5xx >= cfg.HTTP5xxWarn && t.Status5xx*100 >= cfg.HTTP5xxPct*t.Requests {
+		raise(Warn, "%d Antworten mit 5xx in den letzten 24 Stunden (von %d Zugriffen)", t.Status5xx, t.Requests)
 	}
 	if cfg.Uptime != nil {
 		// u.Since nach now: Tagesstand aus der Vergangenheit, die heutige Prüfung gilt dafür nicht.
