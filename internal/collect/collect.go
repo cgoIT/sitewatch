@@ -132,6 +132,7 @@ func Collect(ctx context.Context, cfg Config) (report.Report, error) {
 			}
 		}
 		r.Errors = errs.list(cfg.MaxErrors)
+		r.ErrorsKnown = &errs.known
 	}
 
 	if u, err := url.Parse(cfg.URL); err == nil && u.Scheme == "https" { // Parse normalisiert das Schema auf Kleinbuchstaben

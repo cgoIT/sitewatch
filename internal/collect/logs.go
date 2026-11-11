@@ -84,6 +84,7 @@ func parsePHPError(line string) (time.Time, string, string, bool) {
 type errorSet struct {
 	now, since time.Time
 	groups     map[[2]string]*report.LogError
+	known      int // als bekannt ausgeblendete CSP-Meldungen (cspNoise)
 }
 
 func newErrorSet(now time.Time, window time.Duration) *errorSet {
@@ -118,6 +119,10 @@ func (s *errorSet) add(parse logParser, files ...string) (first error) {
 func (s *errorSet) addLine(parse logParser, line string) {
 	ts, level, msg, ok := parse(line)
 	if !ok || ts.Before(s.since) || ts.After(s.now.Add(5*time.Minute)) {
+		return
+	}
+	if knownCSP(msg) {
+		s.known++
 		return
 	}
 	k := [2]string{level, cleanMessage(msg)}

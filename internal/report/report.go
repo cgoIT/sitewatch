@@ -14,12 +14,15 @@ const SchemaVersion = 1
 
 // Report ist ein vollständiger Zustandsbericht für genau eine Site.
 type Report struct {
-	Schema      int        `json:"schema"`
-	Agent       Agent      `json:"agent"`
-	Host        Host       `json:"host"`
-	Site        Site       `json:"site"`
-	Errors      []LogError `json:"errors"`
-	CollectedAt time.Time  `json:"collected_at"`
+	Schema int        `json:"schema"`
+	Agent  Agent      `json:"agent"`
+	Host   Host       `json:"host"`
+	Site   Site       `json:"site"`
+	Errors []LogError `json:"errors"`
+	// ErrorsKnown zählt CSP-Meldungen aus Besucher-Browsern, die der Agent als bekannt ausblendet (nicht in Errors enthalten).
+	// nil = der Agent kennt die Ausnahmeregeln nicht (ältere Version).
+	ErrorsKnown *int      `json:"errors_known,omitempty"`
+	CollectedAt time.Time `json:"collected_at"`
 }
 
 // AgentContaoBundle ist der Agent-Typ des Contao-Bundles (cgoit/contao-sitewatch-bundle) für Hosting ohne eigene Programme.
@@ -294,6 +297,9 @@ func (r *Report) Validate(now time.Time) error {
 	}
 	if t := r.Site.Traffic; t != nil && (badInt(&t.Requests) || badInt(&t.Status4xx) || badInt(&t.Status5xx)) {
 		return errors.New("Zugriffszahlen ungültig")
+	}
+	if badInt(r.ErrorsKnown) {
+		return errors.New("errors_known ungültig")
 	}
 	if badInt(r.Host.SSHFailed) {
 		return errors.New("ssh_failed ungültig")

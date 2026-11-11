@@ -23,6 +23,7 @@ type Sample struct {
 	DiskFreePct       *int      // bei verdichteten Punkten das Minimum im Block
 	OpenUpdates       int
 	Errors            int
+	ErrorsKnown       *int // als bekannt ausgeblendete CSP-Meldungen (report.ErrorsKnown); nil = vom Agenten nicht gemeldet
 	PendingMigrations *int
 	CronAgeSec        *int // Alter des letzten Cron-Laufs zum Zeitpunkt des Reports
 	BackupAgeSec      *int
@@ -40,8 +41,8 @@ func SampleOf(e Entry, level int) Sample {
 	r := e.Report
 	s := Sample{
 		At: r.CollectedAt, Level: level, DiskFreePct: r.Host.DiskFreePct, OpenUpdates: r.Site.OpenUpdates() + r.Host.OpenOSUpdates(), // Composer- plus Betriebssystem-Pakete
-		PendingMigrations: r.Site.PendingMigrations,
-		Contao:            r.Site.Contao, PHP: r.Site.PHP, MariaDB: r.Host.MariaDB, Nginx: r.Host.Nginx,
+		PendingMigrations: r.Site.PendingMigrations, ErrorsKnown: r.ErrorsKnown,
+		Contao: r.Site.Contao, PHP: r.Site.PHP, MariaDB: r.Host.MariaDB, Nginx: r.Host.Nginx,
 	}
 	for _, le := range r.Errors {
 		s.Errors += le.Count

@@ -7,6 +7,9 @@ func migrateDiskHealth(tx *sql.Tx) error { return addSampleCols(tx, "bad_sectors
 // migrateTraffic: Zugriffe und 5xx-Antworten der letzten 24 Stunden je Verlaufspunkt.
 func migrateTraffic(tx *sql.Tx) error { return addSampleCols(tx, "requests", "http_5xx") }
 
+// migrateErrorsKnown: als bekannt ausgeblendete CSP-Meldungen je Verlaufspunkt.
+func migrateErrorsKnown(tx *sql.Tx) error { return addSampleCols(tx, "errors_known") }
+
 func addSampleCols(tx *sql.Tx, cols ...string) error {
 	for _, col := range cols { // idempotent, wie die übrigen Migrationen
 		var n int

@@ -514,6 +514,27 @@ func TestHostDetailShowsNVMeWear(t *testing.T) {
 	}
 }
 
+// Ausgeblendete CSP-Meldungen: Zahl auf der Detailseite, eigener Wert im Verlauf, eigene Kurve.
+func TestDetailShowsKnownCSPCount(t *testing.T) {
+	srv, tok, now := setup(t)
+	known := 42
+	rep := report.Report{Schema: 1, CollectedAt: now, Site: report.Site{ID: "kunde-c", Name: "Kunde C", Kind: "contao"}, ErrorsKnown: &known}
+	if w := post(srv, tok, rep); w.Code != http.StatusNoContent {
+		t.Fatalf("Ingest: %d %s", w.Code, w.Body.String())
+	}
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/sites/kunde-c", nil))
+	for _, want := range []string{"42 CSP-Meldungen als bekannt ausgeblendet", "Ausgeblendete CSP-Meldungen (24 Std.)"} {
+		if !strings.Contains(w.Body.String(), want) {
+			t.Errorf("%q fehlt auf der Detailseite", want)
+		}
+	}
+	hist, err := srv.Store.History("kunde-c", 1)
+	if err != nil || len(hist) != 1 || hist[0].ErrorsKnown == nil || *hist[0].ErrorsKnown != 42 || hist[0].Errors != 0 {
+		t.Errorf("Verlauf: %+v %v", hist, err)
+	}
+}
+
 func TestDetailShowsTrafficAndHostJournal(t *testing.T) {
 	srv, tok, now := setup(t)
 	rep := report.Report{Schema: 1, CollectedAt: now, Site: report.Site{ID: "kunde-c", Name: "Kunde C", Kind: "contao", Traffic: &report.Traffic{Requests: 18667, Status4xx: 1884}},

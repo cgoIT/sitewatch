@@ -9,7 +9,7 @@ Was das Dashboard zeigt (je Site und für den Server):
 
 - Versionen von Contao, PHP, MariaDB und nginx, dazu das Ende der Herstellerunterstützung (endoflife.date)
 - offene Composer-Updates und Sicherheitshinweise (`composer outdated/audit`), mit Ausschlussregeln
-- letzte Fehler aus den Monolog-Logs, offene Contao-Migrationen, letzter Contao-Cron-Lauf
+- letzte Fehler aus den Monolog-Logs (bekannte CSP-Meldungen aus Besucher-Browsern werden nur gezählt, Regeln in `internal/collect/csp.go`), offene Contao-Migrationen, letzter Contao-Cron-Lauf
 - mit dem Website-Stack (Feld `SITE_DIR`): Fehler aus `logs/nginx/error.log`, `logs/php/error.log` und `logs/php/fpm-error.log`
   (nur `error` und höher bzw. PHP Fatal/Parse error; die Sperrregel „access forbidden by rule“ zählt nicht) sowie die Zugriffe der
   letzten 24 Stunden aus `logs/nginx/access.log` als Summen (Anfragen, 4xx, 5xx; ohne Anfragen vom Server selbst). Adressen und Pfade
