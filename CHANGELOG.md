@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.0](https://github.com/cgoIT/sitewatch/compare/v1.8.2...v1.9.0) (2026-11-11)
+
+
+### Features
+
+* bekannte CSP-Meldungen aus Besucher-Browsern ausblenden und zählen ([f407f65](https://github.com/cgoIT/sitewatch/commit/f407f653ab11b67225ae06dd0c8b093cd31f35a1))
+
 ## [1.8.2](https://github.com/cgoIT/sitewatch/compare/v1.8.1...v1.8.2) (2026-11-10)
 
 
