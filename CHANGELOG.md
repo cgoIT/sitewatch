@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.11.0](https://github.com/cgoIT/sitewatch/compare/v1.10.1...v1.11.0) (2026-11-19)
+
+
+### Features
+
+* Site-ID bei der Auftragsbestätigung kopierbar, Autokorrektur im Feld aus ([af42ad0](https://github.com/cgoIT/sitewatch/commit/af42ad0482be08e6bdf925148d41c073524b3aef))
+
 ## [1.10.1](https://github.com/cgoIT/sitewatch/compare/v1.10.0...v1.10.1) (2026-11-19)
 
 
