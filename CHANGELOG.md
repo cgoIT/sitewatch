@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.1](https://github.com/cgoIT/sitewatch/compare/v1.10.0...v1.10.1) (2026-11-19)
+
+
+### Bug Fixes
+
+* apt-utils im apt-Workflow installieren ([2558bdd](https://github.com/cgoIT/sitewatch/commit/2558bdde374964e8febc9323020fce52745a3aa3))
+
 ## [1.10.0](https://github.com/cgoIT/sitewatch/compare/v1.9.0...v1.10.0) (2026-11-19)
 
 
