@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.10.0](https://github.com/cgoIT/sitewatch/compare/v1.9.0...v1.10.0) (2026-11-19)
+
+
+### Features
+
+* Header mit Navigation beim Scrollen fixieren ([caca172](https://github.com/cgoIT/sitewatch/commit/caca172df57c265c39d73b6d82a77d094ba67e96))
+* Header mit Navigation beim Scrollen fixieren ([f4218ee](https://github.com/cgoIT/sitewatch/commit/f4218ee3d6118c0b1c584d6a56f0e2edf79fee36))
+
 ## [1.9.0](https://github.com/cgoIT/sitewatch/compare/v1.8.2...v1.9.0) (2026-11-11)
 
 
