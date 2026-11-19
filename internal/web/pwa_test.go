@@ -83,7 +83,7 @@ func TestPushRoutenUndEinstellungen(t *testing.T) {
 		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { http.Error(w, "login", http.StatusUnauthorized) })
 	}
 	h := srv.Handler()
-	for _, p := range []string{"/sw.js", "/push.js"} {
+	for _, p := range []string{"/sw.js", "/push.js", "/copy.js"} {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, httptest.NewRequest("GET", p, nil))
 		if w.Code != 200 || !strings.HasPrefix(w.Header().Get("Content-Type"), "text/javascript") {

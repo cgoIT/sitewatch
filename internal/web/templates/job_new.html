@@ -10,9 +10,10 @@
 <p class="muted">Der signierte Auftrag gilt {{.Minutes}} Minuten ab Freigabe. Holt der Agent ihn bis dahin nicht ab, verfällt er. Die Ausgabe siehst du danach live.</p>
 <form method="post" action="/jobs" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
   <input type="hidden" name="site" value="{{.Site}}"><input type="hidden" name="action" value="{{.Action.Name}}">
-  {{if .Action.NeedsID}}<label class="f">Zur Bestätigung die Site-ID eintragen<input name="confirm" autocomplete="off" placeholder="{{.Site}}" required></label>{{end}}
+  {{if .Action.NeedsID}}<div style="flex-basis:100%">Zur Bestätigung die Site-ID kopieren und unten einfügen:<div style="display:flex;gap:8px;align-items:center;margin-top:6px"><code class="mono" id="site-id" style="user-select:all">{{.Site}}</code><button type="button" class="btn" data-copy="{{.Site}}" data-src="site-id">Kopieren</button></div></div>
+  <label class="f">Site-ID<input name="confirm" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="{{.Site}}" required></label>{{end}}
   <button class="btn primary" type="submit">Freigeben und ausführen</button>
   <a class="btn" href="/jobs" style="text-decoration:none">Abbrechen</a>
 </form>
 </div></section>
-</main>{{template "foot"}}</body></html>
+</main>{{if .Action.NeedsID}}<script src="/copy.js"></script>{{end}}{{template "foot"}}</body></html>

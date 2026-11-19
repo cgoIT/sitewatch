@@ -147,6 +147,7 @@ func (s *Server) Handler() http.Handler {
 	// Service Worker und Skript ohne Login: Der Browser holt den Worker ohne Weiterleitung, sonst schlägt die Registrierung fehl.
 	mux.HandleFunc("GET /sw.js", script("sw.js"))
 	mux.HandleFunc("GET /push.js", script("push.js"))
+	mux.HandleFunc("GET /copy.js", script("copy.js"))
 	for _, n := range []string{"icon-192.png", "icon-512.png", "apple-touch-icon.png"} {
 		mux.HandleFunc("GET /"+n, png(n))
 	}
