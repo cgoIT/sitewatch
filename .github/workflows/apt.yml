@@ -57,6 +57,7 @@ jobs:
         run: |
           test -n "$APT_GPG_PRIVATE_KEY" || { echo "Secret APT_GPG_PRIVATE_KEY fehlt (siehe README)"; exit 1; }
           printf '%s\n' "$APT_GPG_PRIVATE_KEY" | gpg --batch --import
+          sudo apt-get install -y --no-install-recommends apt-utils # liefert apt-ftparchive, auf dem Runner nicht mehr vorinstalliert
           scripts/build-apt.sh
       - uses: actions/upload-pages-artifact@v3
         with:
