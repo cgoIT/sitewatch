@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.0](https://github.com/cgoIT/sitewatch/compare/v1.11.0...v1.12.0) (2026-11-22)
+
+
+### Features
+
+* weitere bekannte CSP-Meldungen ausblenden (Chrome/118 script-src, Desktop-Safari style-src-attr) ([75c26f0](https://github.com/cgoIT/sitewatch/commit/75c26f0b593c7d6404cf801ab38bb8abb9274c1f))
+
 ## [1.11.0](https://github.com/cgoIT/sitewatch/compare/v1.10.1...v1.11.0) (2026-11-19)
 
 
