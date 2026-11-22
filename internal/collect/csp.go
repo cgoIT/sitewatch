@@ -17,7 +17,10 @@ type cspRule struct {
 // (In-App-Browser, Erweiterungen), kein Fehler der Seite. Alles andere bleibt sichtbar, auch neue Direktiven.
 var cspNoise = []cspRule{
 	// mobiles WebKit (Safari, In-App-Browser, Chrome auf iOS) und Chrome auf Android
-	{directives: []string{"style-src-attr", "style-src-elem"}, ua: [][]string{{"iPhone"}, {"iPad"}, {"Android", "Chrome"}}},
+	{directives: []string{"style-src-attr", "style-src-elem"}, ua: [][]string{{"iPhone"}, {"iPad"}, {"Android", "Chrome"}, {"Macintosh", "Version/"}}},
+	// script-src (blocked-uri "eval") stets vom eingefrorenen Windows-Chrome/118 (Bot/Scanner, 65 von 65 Meldungen am 22.11.2026);
+	// bewusst nur diese Version: andere Browser bei script-src bleiben sichtbar
+	{directives: []string{"script-src"}, ua: [][]string{{"Windows", "Chrome/118.0.0.0"}}},
 	// Desktop-Chrome und -Edge (Erweiterungen)
 	{directives: []string{"connect-src"}, ua: [][]string{{"Windows", "Chrome"}, {"Windows", "Edg/"}, {"Macintosh", "Chrome"}, {"Macintosh", "Edg/"}}, notUA: []string{"Mobile", "Android"}},
 }

@@ -19,6 +19,7 @@ const (
 	uaIPhoneCriOS   = `Mozilla\\/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit\\/605.1.15 (KHTML, like Gecko) CriOS\\/151.0.0.0 Mobile\\/15E148 Safari\\/604.1`
 	uaAndroidChrome = `Mozilla\\/5.0 (Linux; Android 10; K) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/151.0.0.0 Mobile Safari\\/537.36`
 	uaWinChrome     = `Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/151.0.0.0 Safari\\/537.36`
+	uaWinChrome118  = `Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/118.0.0.0 Safari\\/537.36`
 	uaWinEdge       = uaWinChrome + ` Edg\\/151.0.0.0`
 	uaWinFirefox    = `Mozilla\\/5.0 (Windows NT 10.0; Win64; x64; rv:150.0) Gecko\\/20100101 Firefox\\/150.0`
 	uaMacSafari     = `Mozilla\\/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit\\/605.1.15 (KHTML, like Gecko) Version\\/27.2 Safari\\/605.1.15`
@@ -36,12 +37,15 @@ func TestKnownCSP(t *testing.T) {
 		{"connect-src", uaWinChrome, true},
 		{"connect-src", uaWinEdge, true},
 		{"script-src", uaWinChrome, false},
+		{"script-src", uaWinChrome118, true},
+		{"script-src-elem", uaWinChrome118, false},
 		{"script-src-elem", uaWinFirefox, false},
 		{"frame-src", uaWinChrome, false},
 		{"img-src", uaIPhoneCriOS, false},
 		{"style-src-attr", uaWinFirefox, false},
 		{"style-src-elem", uaWinChrome, false},
-		{"style-src-attr", uaMacSafari, false},
+		{"style-src-attr", uaMacSafari, true},
+		{"script-src", uaMacSafari, false},
 		{"connect-src", uaMacSafari, false},
 		{"connect-src", uaAndroidChrome, false},
 		{"connect-src", uaIPhoneSafari, false},
